@@ -11,12 +11,22 @@
 ARG RUBY_VERSION=4.0.6
 FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
 
+LABEL org.opencontainers.image.source=https://github.com/dkam/spool
+
 # Rails app lives here
 WORKDIR /rails
 
-# Install base packages
+# Install base packages.
+#
+# No libvips: there is no Active Storage and no image_processing gem, so
+# nothing in this app has ever touched an image. The Rails template ships it by
+# default; it is ~40MB of nothing here.
+#
+# zstd is the CLI, not the library — zstd-ruby is statically linked and needs
+# no package. The binary is here for dictionary training (milestone 6), which
+# shells out to `zstd --train` because zstd-ruby exposes no training API.
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y curl libjemalloc2 libvips sqlite3 && \
+    apt-get install --no-install-recommends -y curl libjemalloc2 sqlite3 zstd && \
     ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
@@ -30,9 +40,10 @@ ENV RAILS_ENV="production" \
 # Throw-away build stage to reduce size of final image
 FROM base AS build
 
-# Install packages needed to build gems
+# Install packages needed to build gems. git is required because the Gemfile
+# pulls beaneater from the tuber fork.
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential git libvips libyaml-dev pkg-config && \
+    apt-get install --no-install-recommends -y build-essential git libyaml-dev pkg-config && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 # Install application gems
@@ -46,6 +57,14 @@ RUN bundle install && \
 
 # Copy application code
 COPY . .
+
+# The commit this image was built from, read at boot by
+# config/initializers/revision.rb. Declared here rather than at the top because
+# an ARG is only in scope for the stage that declares it — put it before the
+# FROM and the --build-arg would be silently ignored, which is the failure mode
+# where every deploy reports "unknown" and nobody notices for a month.
+ARG GIT_SHA=unknown
+RUN echo "${GIT_SHA}" > VERSION
 
 # Precompile bootsnap code for faster boot times.
 # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
@@ -69,9 +88,19 @@ USER 1000:1000
 COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --chown=rails:rails --from=build /rails /rails
 
-# Entrypoint prepares the database.
+# Entrypoint prepares the database — but only for the web process, so the
+# worker and scheduler roles below never race it to run migrations.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
-# Start server via Thruster by default, this can be overwritten at runtime
+# One image, three processes. Kamal runs the same image with a different CMD
+# per role; the queue consumers and the scheduler are separate containers, not
+# threads inside Puma, so a wedged consumer can be restarted without dropping
+# requests.
+#
+#   web        ./bin/thrust ./bin/rails server   (the default, below)
+#   worker     ./bin/worker all                  (or: mail | maintenance)
+#   scheduler  ./bin/scheduler
+#
+# See docs/queue.md for what each role consumes.
 EXPOSE 80
 CMD ["./bin/thrust", "./bin/rails", "server"]

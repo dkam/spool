@@ -10,6 +10,18 @@
 #
 # after_initialize because SpoolAuthorization is autoloaded.
 Rails.application.config.after_initialize do
+  # Compiling assets is not serving traffic. `docker build` boots this app in
+  # RAILS_ENV=production with none of the runtime configuration present — that
+  # is the whole point of SECRET_KEY_BASE_DUMMY, which Rails sets for exactly
+  # this case — so the two `raise`s below would fail every image build rather
+  # than any misconfigured deploy.
+  #
+  # The checks are still right and still fatal; they just belong to starting up,
+  # not to building. Guarding on the dummy-secret flag rather than on the task
+  # name keeps that distinction in one place, and it is the same signal Rails
+  # itself uses to mean "this boot will never serve a request".
+  next if ENV["SECRET_KEY_BASE_DUMMY"].present?
+
   state = SpoolAuthorization.oidc_state
 
   if state == :enforcing && !SpoolAuthorization.allowlist_configured?

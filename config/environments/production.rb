@@ -46,9 +46,11 @@ Rails.application.configure do
   # Replace the default in-process memory cache store with a durable alternative.
   config.cache_store = :solid_cache_store
 
-  # Replace the default in-process and non-durable queuing backend for Active Job.
-  config.active_job.queue_adapter = :solid_queue
-  config.solid_queue.connects_to = {database: {writing: :queue}}
+  # Active Job runs on tuber, set once in config/application.rb for every
+  # environment — see docs/queue.md. The generated Solid Queue configuration
+  # that stood here was left over from the Rails template: solid_queue is not
+  # in the Gemfile, so this file raised NoMethodError the first time anything
+  # booted in production, which was the container build.
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.

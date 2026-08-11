@@ -20,6 +20,7 @@ recorded here, change the document in the same commit.
 | [auth.md](auth.md) | OIDC, the allowlist, the three configuration states |
 | [ui-contract.md](ui-contract.md) | The model API the views are built against |
 | [ui.md](ui.md) | The screens: design tokens, screen anatomy, Stimulus and Turbo conventions |
+| [deploy.md](deploy.md) | Docker image, versioning, release, what CI runs |
 | [todo.md](todo.md) | What's built, what's next, open decisions |
 
 ## Orientation for someone (or something) new to the codebase

@@ -36,8 +36,19 @@ export default class extends Controller {
   // enough that a deliberate hold feels answered.
   static hintDelay = 400
 
-  // Two taps of the same key, at the speed a person taps twice on purpose.
-  static doubleTapWindow = 450
+  // Press-to-press, not release-to-press, and generous with it.
+  //
+  // Both parts were wrong first time and the tests didn't catch either, because
+  // Selenium fires two taps within a millisecond and a hand does not. A
+  // deliberate tap of a modifier holds it for a beat, and the gap between two
+  // of them is comfortably over 450ms — which is why the first version worked
+  // in the suite and not for the person using it. Timing the way a double
+  // click is timed, from press to press, is both the forgiving reading and the
+  // one people already have in their fingers.
+  //
+  // Widening is close to free: what stops "HELLO" latching is that any other
+  // key disarms the tap, not the length of the window.
+  static doubleTapWindow = 750
 
   static keys = {
     j: "next", arrowdown: "next",
@@ -51,6 +62,11 @@ export default class extends Controller {
     this.onKeyUp = this.handleKeyUp.bind(this)
     this.onBlur = this.hideHint.bind(this)
     this.onFocusIn = this.handleFocusIn.bind(this)
+    // Shift-click to extend a text selection releases Shift afterwards, which
+    // would otherwise arm the second half of a double tap and let the next
+    // stray Shift latch the mode. Taken from booko's controller, which guards
+    // the same case.
+    this.onPointerDown = () => { this.tapArmed = false }
 
     // On window rather than the element: the keys have to work before anything
     // on the page has been clicked, and an unfocused <body> receives nothing.
@@ -63,6 +79,7 @@ export default class extends Controller {
     // thought. Unlatching there rather than only on Escape means the mode can
     // never be the reason a keystroke went missing from a reply.
     window.addEventListener("focusin", this.onFocusIn)
+    window.addEventListener("pointerdown", this.onPointerDown)
 
     // The latch outlives a navigation on purpose: latch, walk the list, open a
     // ticket, come back — the mode you turned on is still on. It is a mode, so
@@ -75,6 +92,7 @@ export default class extends Controller {
     window.removeEventListener("keyup", this.onKeyUp)
     window.removeEventListener("blur", this.onBlur)
     window.removeEventListener("focusin", this.onFocusIn)
+    window.removeEventListener("pointerdown", this.onPointerDown)
     clearTimeout(this.hintTimer)
     this.hintTimer = null
   }
@@ -231,10 +249,9 @@ export default class extends Controller {
   handleKeyUp(event) {
     if (event.key !== "Shift") return
 
-    // Arm the second half of a double tap, and time it from the release so
-    // holding Shift for a while and letting go can't count as the first tap.
+    // Arms the second half of a double tap: a press only counts as the second
+    // one if the first was actually released.
     this.tapArmed = true
-    this.lastShiftUp = Date.now()
 
     if (!this.latched) this.hideHint()
   }
@@ -245,10 +262,14 @@ export default class extends Controller {
     // Auto-repeat while the key is held is not a second tap.
     if (event.repeat) return
 
-    const doubled =
-      this.tapArmed && Date.now() - this.lastShiftUp < this.constructor.doubleTapWindow
+    const now = Date.now()
+    // tapArmed means a release happened since the last press, so a hold can't
+    // masquerade as two taps; the window then measures press to press.
+    const doubled = this.tapArmed && now - this.lastShiftDown < this.constructor.doubleTapWindow
 
+    this.lastShiftDown = now
     this.tapArmed = false
+
     if (!doubled) return this.scheduleHint(event)
 
     this.latched ? this.unlatch() : this.latch()

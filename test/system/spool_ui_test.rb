@@ -283,6 +283,17 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_selector "a[data-selected][data-ticket-id='#{other.id}']"
   end
 
+  # Selenium fires two taps within milliseconds; a person tapping a modifier
+  # deliberately is far slower than that, and the window has to fit the hand
+  # rather than the test harness.
+  test "a deliberate, human-paced double tap still latches" do
+    visit root_path
+
+    double_tap_shift gap: 0.5
+
+    assert_selector "[data-shortcuts-target='hint'][data-latched]"
+  end
+
   test "typing a capital does not latch shortcut mode" do
     visit ticket_path(@ticket)
 
@@ -324,10 +335,14 @@ class SpoolUiTest < ApplicationSystemTestCase
 
   # Two discrete taps, not one hold — the controller times the gap from the
   # release, so key_up has to happen between them.
-  def double_tap_shift
-    action = page.driver.browser.action
-    2.times { action.key_down(:shift).key_up(:shift) }
-    action.perform
+  def double_tap_shift(gap: 0)
+    tap_shift
+    sleep gap
+    tap_shift
+  end
+
+  def tap_shift
+    page.driver.browser.action.key_down(:shift).key_up(:shift).perform
   end
 
   def fill_in_notes(text)

@@ -1,5 +1,10 @@
 require_relative "boot"
 
+# Before anything else, so Spool::VERSION is available to initializers and to
+# any code that wants to report which release it is. Kept requirable without
+# Rails — the build workflow reads it with a bare `ruby -e`.
+require_relative "version"
+
 require "rails"
 
 # Selective railtie requires rather than `rails/all`. Active Storage and Action
@@ -29,7 +34,15 @@ module Spool
     # Production must supply a real secret. Development and test fall back to
     # Rails' generated local secret (tmp/local_secret.txt) so bin/rails works
     # without the variable being set.
-    if Rails.env.production?
+    #
+    # SECRET_KEY_BASE_DUMMY is the exception, and it is not optional: the
+    # Dockerfile precompiles assets in a production environment that has no
+    # secret and must not be given one, so Rails offers this flag to stand in a
+    # throwaway value. Reading ENV directly bypasses that mechanism, and this
+    # check raised straight through it — the image could not be built at all.
+    # Ask Rails whether a secret is available rather than asking the
+    # environment, and the two agree.
+    if Rails.env.production? && ENV["SECRET_KEY_BASE_DUMMY"].blank?
       config.secret_key_base = ENV.fetch("SECRET_KEY_BASE") do
         raise "SECRET_KEY_BASE environment variable is required but not set."
       end
