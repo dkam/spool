@@ -44,10 +44,18 @@ them:
 
 Roles, not hues — nothing in a template names a colour.
 
-The one exception is the favicon: `public/icon.svg`, its rendered `icon.png` and
-`manifest.json.erb`'s `theme_color` all write `#f0592a` literally, because none
-of them can read a CSS variable. If the accent ever changes, those three change
-by hand — the re-render command is in a comment in the SVG.
+Two exceptions, both because the file cannot reach the stylesheet:
+
+- **The favicon** — `public/icon.svg`, its rendered `icon.png` and
+  `manifest.json.erb`'s `theme_color` all write `#f0592a` literally, because
+  none of them can read a CSS variable. If the accent ever changes, those three
+  change by hand; the re-render command is in a comment in the SVG.
+- **`errors/auth_misconfigured.html.erb`** — renders with `layout: false` and a
+  `<style>` block of literal greys, and also carries the app's only
+  `border-radius`. Its job is to report a missing variable at boot, so it has to
+  render when the layout or the compiled stylesheet is exactly what's broken.
+  **Do not "fix" it to use tokens** — depending on the asset pipeline is the one
+  thing this page must not do. It deliberately doesn't look like Spool.
 
 **Dark theme is one block.** Tailwind v4 compiles utilities to `var(--color-*)`
 references rather than baked-in hex, so redeclaring the same variables under
@@ -62,7 +70,9 @@ set at; interface text uses the default 1.55.
 
 ### Rules of the system
 
-- **No rounded corners.** The only `rounded-full` in the app is the dots.
+- **No rounded corners.** The only `rounded-full` in the app is the dots, and
+  the only `border-radius` is in the boot-failure page above, which is outside
+  the system on purpose.
 - **No shadows and no filled surfaces.** Structure comes from alignment and
   dividers. If something needs separating, it gets a rule.
 - **Flush left**, including labels inside wide controls.
