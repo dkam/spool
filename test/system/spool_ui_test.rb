@@ -205,6 +205,105 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_no_selector "[data-shortcuts-target='hint']", visible: true
   end
 
+  # --- Search ---------------------------------------------------------------
+
+  test "typing in the search box narrows the list in place" do
+    other = Ticket.create!(customer: @customer, subject: "Invoice for July",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: other, direction: "inbound", message_id: "<in-9@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Could you resend it?", "html" => nil}),
+      body_excerpt: "Could you resend it?")
+
+    visit root_path
+    assert_text "Invoice for July"
+
+    fill_in "q", with: "smtp_tls"
+
+    assert_no_text "Invoice for July"
+    assert_text "Can't connect SMTP"
+    # The whole point of the frame: the URL keeps up, so the state you typed
+    # into is linkable and the back button still means something.
+    assert_current_path(/q=smtp_tls/)
+    # And the box was never replaced, so what you typed is still in it.
+    assert_equal "smtp_tls", find_field("q").value
+  end
+
+  test "the search key works shifted or not — they are the same key" do
+    visit root_path
+
+    press "/"
+    assert_equal "q", evaluate_script("document.activeElement.id")
+
+    find("h1").click
+    assert_not_equal "q", evaluate_script("document.activeElement.id")
+
+    # Shift + the same physical key types "?", which has to land in the same
+    # place or the shortcut works depending on a finger.
+    press :shift, "/"
+    assert_equal "q", evaluate_script("document.activeElement.id")
+  end
+
+  # The latch exists for exactly this: after typing, the caret is in the search
+  # box and every shortcut is correctly suppressed, so there is otherwise no
+  # keyboard route from the box into the results you just asked for.
+  test "double-tapping shift hands the keys back after a search" do
+    other = Ticket.create!(customer: @customer, subject: "Invoice for July",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: other, direction: "inbound", message_id: "<in-8@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "smtp_tls again on the invoice box", "html" => nil}),
+      body_excerpt: "smtp_tls again on the invoice box")
+
+    visit root_path
+    fill_in "q", with: "smtp_tls"
+    assert_text "Invoice for July"
+
+    # Still typing: a bare j belongs in the box, not on the page.
+    assert_equal "q", evaluate_script("document.activeElement.id")
+    assert_no_selector "[data-selected]"
+
+    double_tap_shift
+
+    # The box let go, and the legend says why bare keys now do something.
+    assert_not_equal "q", evaluate_script("document.activeElement.id")
+    assert_selector "[data-shortcuts-target='hint'][data-latched]"
+    assert_text(/exit/i)
+
+    # Unshifted now.
+    press "j"
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
+    press "j"
+    assert_selector "a[data-selected][data-ticket-id='#{other.id}']"
+
+    press :escape
+    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
+    # And unlatched, a bare j is inert again.
+    press "k"
+    assert_selector "a[data-selected][data-ticket-id='#{other.id}']"
+  end
+
+  test "typing a capital does not latch shortcut mode" do
+    visit ticket_path(@ticket)
+
+    # Shift, letter, Shift, letter — two Shift presses, but not a double tap.
+    find_field("body").send_keys([:shift, "h"], "ello", [:shift, "t"], "here")
+
+    assert_field "body", with: "HelloThere"
+    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
+  end
+
+  test "escape empties the box and gives the list back" do
+    visit root_path
+    fill_in "q", with: "smtp_tls"
+    assert_current_path(/q=smtp_tls/)
+
+    find_field("q").send_keys(:escape)
+
+    assert_equal "", find_field("q").value
+    assert_no_current_path(/q=/)
+  end
+
   test "customer notes save themselves" do
     visit customer_path(@customer)
 
@@ -221,6 +320,14 @@ class SpoolUiTest < ApplicationSystemTestCase
   # different thing than the one a user does.
   def press(*sequence)
     find("body").send_keys(sequence)
+  end
+
+  # Two discrete taps, not one hold — the controller times the gap from the
+  # release, so key_up has to happen between them.
+  def double_tap_shift
+    action = page.driver.browser.action
+    2.times { action.key_down(:shift).key_up(:shift) }
+    action.perform
   end
 
   def fill_in_notes(text)

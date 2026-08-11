@@ -1,0 +1,39 @@
+<%#
+  One person in the People section of a search.
+
+  Deliberately a pointer, not an expansion. Matching a customer means "here is
+  a person", and the useful answer is the person once — not their forty tickets
+  flooding the list and burying every message that actually contained the word
+  you typed. customers/show is already the screen that lists all their tickets,
+  so this row's whole job is to get you there.
+
+  Locals: customer, counts ({"open" => 2, "closed" => 9} or nil)
+%>
+<% counts ||= {} %>
+<% total = counts.values.sum %>
+
+<%#
+  turbo_frame: "_top" is load-bearing. This row renders inside the ticket_list
+  frame, so without it Turbo scopes the visit to that frame, finds no matching
+  frame in customers/show and replaces the row with "Content missing". Same rule
+  as tickets/_ticket_row, and the same bug twice — any link added inside that
+  frame needs it.
+%>
+<%= link_to customer_path(customer),
+      data: { turbo_frame: "_top" },
+      class: "relative grid grid-cols-[1fr_132px] gap-6 py-[15px] pr-3 border-b border-rule hover:bg-hover hover:no-underline" do %>
+
+  <%# A hollow ring, not a dot: this row is a person rather than a ticket, and
+      the rail's filled/hollow vocabulary is about read state. %>
+  <span class="absolute -left-[30px] top-5 w-[9px] h-[9px] rounded-full bg-canvas border border-faint"></span>
+
+  <div class="min-w-0 flex items-baseline gap-2">
+    <span class="font-medium tracking-[-0.01em]"><%= customer.display_name %></span>
+    <span class="font-mono text-faint text-xs truncate"><%= customer.email %></span>
+  </div>
+
+  <div class="text-right text-sm text-soft">
+    <%= total == 1 ? "1 ticket" : "#{total} tickets" %><%
+      %><% if counts["open"].to_i.positive? %>, <%= counts["open"] %> open<% end %>
+  </div>
+<% end %>

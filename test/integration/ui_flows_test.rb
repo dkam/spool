@@ -93,6 +93,101 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_select "[data-shortcuts-target=hint]"
   end
 
+  # --- Search ---------------------------------------------------------------
+
+  test "search narrows the list to tickets whose messages match" do
+    other = Ticket.create!(customer: @customer, subject: "Invoice for July",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: other, direction: "inbound", message_id: "<in-2@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Could you resend it?", "html" => nil}),
+      body_excerpt: "Could you resend it?")
+
+    get tickets_path(q: "outbox")
+
+    assert_response :success
+    assert_match "Can&#39;t connect SMTP", response.body
+    assert_no_match(/Invoice for July/, response.body)
+  end
+
+  # The reason search returns a message id and not just a ticket id.
+  test "a result previews the message that matched, not the newest one" do
+    Message.compose!(ticket: @ticket, agent: agent, text: "Glad that sorted it.")
+
+    get tickets_path(q: "outbox")
+
+    assert_response :success
+    assert_match "Nothing leaves the outbox.", response.body
+    assert_no_match(/Glad that sorted it/, response.body)
+  end
+
+  test "search composes with the state filter rather than replacing it" do
+    get tickets_path(q: "outbox", state: "closed")
+
+    assert_response :success
+    assert_no_match(/Can&#39;t connect SMTP/, response.body)
+    # The filter is the likeliest reason a search looks empty and the least
+    # visible, so the empty state has to name it and offer the way past it.
+    assert_match "in this filter", response.body
+    assert_select "a", text: "Search all tickets"
+  end
+
+  test "a customer match is a person, not their tickets" do
+    get tickets_path(q: "fieldworks")
+
+    assert_response :success
+    assert_select "a[href=?]", customer_path(@customer)
+    assert_match "People", response.body
+  end
+
+  # These rows live inside the ticket_list frame, so a link without an explicit
+  # target is scoped to that frame, finds no match in customers/show and renders
+  # "Content missing". It shipped that way once; this is the guard.
+  test "a person row escapes the ticket_list frame" do
+    get tickets_path(q: "fieldworks")
+
+    assert_response :success
+    assert_select "a[href=?][data-turbo-frame=_top]", customer_path(@customer)
+  end
+
+  test "customer search matches inside an address, not just at the start" do
+    # The infix case is exactly what FTS5 cannot do and why this half is LIKE.
+    assert_equal [@customer], Customer.search("ieldwork").to_a
+    assert_equal [], Customer.search("%").to_a
+  end
+
+  test "one character is not a search" do
+    get tickets_path(q: "o")
+
+    assert_response :success
+    # The list stays exactly as it was rather than being narrowed by a letter
+    # that matches most of the table, and no People section appears.
+    assert_match "Can&#39;t connect SMTP", response.body
+    assert_no_match(/People/, response.body)
+    # The box still holds what has been typed so far, and the chip says so.
+    assert_select "input[name=q][value=?]", "o"
+  end
+
+  test "search caps on tickets, not on matching messages" do
+    # Two messages in one ticket both matching: a message-level cap of 1 would
+    # return one ticket here and hide the other entirely.
+    quiet = Ticket.create!(customer: @customer, subject: "Second thread",
+      state: "open", last_activity_at: 2.hours.ago)
+    Message.create!(ticket: quiet, direction: "inbound", message_id: "<in-3@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 2.hours.ago,
+      body: JSON.generate({"text" => "outbox again", "html" => nil}),
+      body_excerpt: "outbox again")
+    Message.create!(ticket: @ticket, direction: "inbound", message_id: "<in-4@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 9.minutes.ago,
+      body: JSON.generate({"text" => "still the outbox", "html" => nil}),
+      body_excerpt: "still the outbox")
+
+    matches = Search::Fts.ticket_matches("outbox", limit: 2)
+
+    assert_equal 2, matches.size, "expected one entry per ticket, not per message"
+    assert_equal [@ticket.id, quiet.id].sort, matches.keys.sort
+  end
+
   # --- Ticket detail --------------------------------------------------------
 
   test "opening a ticket marks it read for this agent" do

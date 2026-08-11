@@ -3,6 +3,7 @@
 <% content_for :shortcuts do %>
   <span class="flex items-center gap-2"><kbd>J</kbd><kbd>K</kbd> Move</span>
   <span class="flex items-center gap-2"><kbd>L</kbd> Open</span>
+  <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
 <% end %>
 
 <div class="max-w-[1000px] px-14 pt-12 pb-24">
@@ -21,8 +22,29 @@
   <%= turbo_frame_tag "ticket_list", data: { turbo_action: "advance" } do %>
     <%= render "filters" %>
 
+    <%# People, above the tickets and separate from them. A person match is a
+        different kind of answer, not a better-ranked ticket — see
+        _person_row.html.erb. Deliberately not narrowed by the state and
+        assignee filters: a person is not open or waiting. %>
+    <% if @customers.present? %>
+      <div class="mt-8 text-2xs uppercase tracking-[0.09em] text-faint">People</div>
+      <div class="relative pl-[30px] mt-3.5">
+        <div class="absolute left-1 top-0 bottom-0 w-px bg-rule"></div>
+
+        <% @customers.each do |customer| %>
+          <%= render "tickets/person_row",
+                customer: customer,
+                counts: @customer_counts[customer.id] %>
+        <% end %>
+      </div>
+    <% end %>
+
     <% if @tickets.any? %>
-      <div class="relative pl-[30px] mt-1.5">
+      <% if @customers.present? %>
+        <div class="mt-8 text-2xs uppercase tracking-[0.09em] text-faint">Tickets</div>
+      <% end %>
+
+      <div class="relative pl-[30px] <%= @customers.present? ? "mt-3.5" : "mt-1.5" %>">
         <%# The vertical rule the row dots sit on. %>
         <div class="absolute left-1 top-0 bottom-0 w-px bg-rule"></div>
 
@@ -34,11 +56,31 @@
                 compact: false %>
         <% end %>
       </div>
+
+      <%# The cap is applied after collapsing matches to tickets, so this counts
+          tickets — but a silent ceiling reads as "that is all there is". %>
+      <% if searching? && @matches.size >= TicketsController::LIST_LIMIT %>
+        <p class="mt-6 text-sm text-faint">
+          Showing the first <%= TicketsController::LIST_LIMIT %> matches. Narrow the search to see fewer.
+        </p>
+      <% end %>
     <% else %>
       <p class="mt-10 text-sm text-soft">
-        Nothing here.
-        <% if @state_filter || @assignee_filter %>
-          <%= link_to "Clear the filters", tickets_path, class: "text-ink underline" %> to see every ticket.
+        <% if searching? %>
+          No tickets match “<%= @query %>”<%= " in this filter" if @state_filter || @assignee_filter %>.
+          <%# The filter is the likeliest reason a search looks empty, and the
+              least visible. Offering the wider search costs nothing and does
+              not claim there is anything there. %>
+          <% if @state_filter || @assignee_filter %>
+            <%= link_to "Search all tickets", tickets_path(q: @query), class: "text-ink underline" %>.
+          <% end %>
+        <% elsif @query.present? %>
+          Keep typing — search needs at least <%= Customer::MIN_SEARCH_LENGTH %> characters.
+        <% else %>
+          Nothing here.
+          <% if @state_filter || @assignee_filter %>
+            <%= link_to "Clear the filters", tickets_path, class: "text-ink underline" %> to see every ticket.
+          <% end %>
         <% end %>
       </p>
     <% end %>

@@ -139,3 +139,19 @@ a[data-selected] .rail-dot {
 .theme-switching * {
   transition: none !important;
 }
+
+/* The header search box is <input type="search"> for semantics, but WebKit's
+   own clear button is the only decorated control on the page and duplicates
+   Escape, which the search controller already handles. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+/* Latched shortcut mode. The legend stops being a hint that fades with the key
+   and becomes the running state of the page, so it takes the accent rule and
+   ink text — the same promotion the rail dot gets when a row is selected. */
+[data-shortcuts-target="hint"][data-latched] {
+  border-top-color: var(--color-accent);
+  color: var(--color-soft);
+}

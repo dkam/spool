@@ -1,30 +1,43 @@
 import { Controller } from "@hotwired/stimulus"
 import { Turbo } from "@hotwired/turbo-rails"
 
-// Keyboard navigation, gated behind a held Shift the way Basecamp does it.
+// Keyboard navigation, gated behind Shift the way Basecamp does it.
 //
-// Shift is the whole safety mechanism. Nothing here fires from a bare
-// keypress, so a shortcut can never be triggered by someone typing a reply —
-// and the guard is a property of the design rather than a list of elements to
-// remember to exclude. Hold Shift for a moment and a legend appears; the keys
-// work immediately either way, the legend is only for people who haven't
-// learned them yet.
+// Shift is the whole safety mechanism. No bare keypress does anything, so a
+// shortcut can never be triggered by someone typing a reply — and the guard is
+// a property of the chord rather than a list of elements to remember to
+// exclude. Two ways to use it:
+//
+//   Hold Shift and press a key. Hold it for a moment and a legend appears
+//   saying what the screen answers to; the keys work whether or not you wait.
+//
+//   Tap Shift twice to latch it. The keys then work unshifted until you press
+//   Escape or click into a field, and the legend stays up saying so.
+//
+// The latch is what makes search navigable. After typing, the caret is in the
+// search box and every shortcut is correctly suppressed — so without it there
+// is no keyboard route from the box into the results you just asked for. Two
+// taps blurs the box and hands the keys back.
 //
 // Mounted on <body>, so one controller serves every screen and each screen
 // declares what it offers by which targets it renders: a list renders `row`
 // targets and gets J/K/L, a ticket renders a `back` target and gets H. A
 // screen with neither is inert, and nothing needs to know which screen it is.
 export default class extends Controller {
-  static targets = ["row", "back", "hint"]
+  static targets = ["row", "back", "hint", "search", "latch"]
 
-  // Both remembered per tab, not per browser: two tabs on two tickets should
+  // All remembered per tab, not per browser: two tabs on two tickets should
   // not fight over one cursor.
   static selectionKey = "spool:selected-ticket"
   static originKey = "spool:ticket-origin"
+  static latchKey = "spool:shortcut-latch"
 
   // Long enough that shift-typing a capital never flashes the legend, short
   // enough that a deliberate hold feels answered.
   static hintDelay = 400
+
+  // Two taps of the same key, at the speed a person taps twice on purpose.
+  static doubleTapWindow = 450
 
   static keys = {
     j: "next", arrowdown: "next",
@@ -37,6 +50,7 @@ export default class extends Controller {
     this.onKeyDown = this.handleKeyDown.bind(this)
     this.onKeyUp = this.handleKeyUp.bind(this)
     this.onBlur = this.hideHint.bind(this)
+    this.onFocusIn = this.handleFocusIn.bind(this)
 
     // On window rather than the element: the keys have to work before anything
     // on the page has been clicked, and an unfocused <body> receives nothing.
@@ -45,13 +59,28 @@ export default class extends Controller {
     // Shift's keyup never arrives if the window loses focus mid-hold, which
     // would strand the legend on screen until the next keypress.
     window.addEventListener("blur", this.onBlur)
+    // Clicking into any field means you are typing again, whatever the latch
+    // thought. Unlatching there rather than only on Escape means the mode can
+    // never be the reason a keystroke went missing from a reply.
+    window.addEventListener("focusin", this.onFocusIn)
+
+    // The latch outlives a navigation on purpose: latch, walk the list, open a
+    // ticket, come back — the mode you turned on is still on. It is a mode, so
+    // it stays until you leave it, and the legend is on screen the whole time.
+    this.applyLatch(this.latched)
   }
 
   disconnect() {
     window.removeEventListener("keydown", this.onKeyDown)
     window.removeEventListener("keyup", this.onKeyUp)
     window.removeEventListener("blur", this.onBlur)
-    this.hideHint()
+    window.removeEventListener("focusin", this.onFocusIn)
+    clearTimeout(this.hintTimer)
+    this.hintTimer = null
+  }
+
+  handleFocusIn(event) {
+    if (this.latched && this.typing(event.target)) this.unlatch()
   }
 
   // Rows arrive and leave whenever the ticket_list frame re-renders, so the
@@ -153,11 +182,44 @@ export default class extends Controller {
   // The legend ------------------------------------------------------------
 
   handleKeyDown(event) {
-    if (event.key === "Shift") return this.scheduleHint(event)
+    if (event.key === "Shift") return this.handleShiftDown(event)
 
-    // Shift and nothing else. Shift+Cmd+L is the browser's, not ours.
-    if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return
+    // Any other key ends a candidate double-tap. Without this, typing "HELLO"
+    // — shift, letter, shift, letter — would latch the mode mid-word.
+    this.tapArmed = false
+
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    // Escape is how you get out, and it has to work from inside the search box
+    // too, which is the one place the typing guard below would swallow it.
+    if (event.key === "Escape" && this.latched) {
+      this.unlatch()
+      return
+    }
+
     if (this.typing(event.target)) return
+
+    // The search key, accepted both shifted and not.
+    //
+    // They are the same physical key: unshifted it types "/", and held with
+    // Shift — the gesture every other shortcut here uses — it types "?". Taking
+    // only one would mean the key worked or didn't depending on a finger that
+    // makes no difference to anything else on the screen. So both.
+    //
+    // "/" alone is the one unshifted shortcut in here and a deliberate
+    // exception: Shift gates the rest to keep them away from someone typing,
+    // which the field check above already handles for this one. Being wrong
+    // costs a focused search box and an Escape. "?" is free because the
+    // shortcut legend appears on a held Shift rather than on a help key.
+    if ((event.key === "/" || event.key === "?") && this.hasSearchTarget) {
+      event.preventDefault()
+      this.searchTarget.focus()
+      this.searchTarget.select()
+      return
+    }
+
+    // Shift, or the latch standing in for it. Shift+Cmd+L is the browser's.
+    if (!event.shiftKey && !this.latched) return
 
     const action = this.constructor.keys[event.key.toLowerCase()]
     if (!action) return
@@ -167,11 +229,66 @@ export default class extends Controller {
   }
 
   handleKeyUp(event) {
-    if (event.key === "Shift") this.hideHint()
+    if (event.key !== "Shift") return
+
+    // Arm the second half of a double tap, and time it from the release so
+    // holding Shift for a while and letting go can't count as the first tap.
+    this.tapArmed = true
+    this.lastShiftUp = Date.now()
+
+    if (!this.latched) this.hideHint()
+  }
+
+  // The latch ---------------------------------------------------------------
+
+  handleShiftDown(event) {
+    // Auto-repeat while the key is held is not a second tap.
+    if (event.repeat) return
+
+    const doubled =
+      this.tapArmed && Date.now() - this.lastShiftUp < this.constructor.doubleTapWindow
+
+    this.tapArmed = false
+    if (!doubled) return this.scheduleHint(event)
+
+    this.latched ? this.unlatch() : this.latch()
+  }
+
+  latch() {
+    this.applyLatch(true)
+
+    // The reason the latch exists: after typing a search the caret is in the
+    // box, and letting go of it is the thing you cannot otherwise do without
+    // reaching for the mouse.
+    if (this.typing(document.activeElement)) document.activeElement.blur()
+  }
+
+  unlatch() {
+    this.applyLatch(false)
+  }
+
+  applyLatch(on) {
+    this.latched = on
+    if (this.hasLatchTarget) this.latchTarget.hidden = !on
+    if (!this.hasHintTarget) return
+
+    // Latched, the legend is not a hint any more — it is the only thing on
+    // screen saying why bare keys are moving the page, so it stays up and says
+    // how to stop.
+    this.hintTarget.hidden = !on
+    this.hintTarget.toggleAttribute("data-latched", on)
+  }
+
+  get latched() {
+    return this.read(this.constructor.latchKey, "memoryLatched") === "on"
+  }
+
+  set latched(on) {
+    this.write(this.constructor.latchKey, "memoryLatched", on ? "on" : "off")
   }
 
   scheduleHint(event) {
-    if (!this.hasHintTarget || this.hintTimer) return
+    if (!this.hasHintTarget || this.hintTimer || this.latched) return
     if (event.metaKey || event.ctrlKey || event.altKey) return
     if (this.typing(event.target)) return
 
@@ -183,7 +300,7 @@ export default class extends Controller {
   hideHint() {
     clearTimeout(this.hintTimer)
     this.hintTimer = null
-    if (this.hasHintTarget) this.hintTarget.hidden = true
+    if (this.hasHintTarget && !this.latched) this.hintTarget.hidden = true
   }
 
   typing(node) {

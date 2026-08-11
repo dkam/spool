@@ -95,5 +95,46 @@ module Search
         %("#{bare.gsub('"', '""')}"#{"*" if prefix})
       }.join(" ")
     end
+
+    # Search at ticket granularity: {ticket_id => best matching message id},
+    # ordered by relevance, capped at `limit` TICKETS.
+    #
+    # Deliberately not built on Message.search, which caps at 200 *messages*
+    # before anything collapses to tickets. That cap is sane at message
+    # granularity and wrong here: 200 messages spread across 12 tickets returns
+    # 12 tickets and silently drops every later match, with nothing on the
+    # screen to say so. The window function does the collapsing inside SQLite
+    # so the cap can be applied to the thing being counted.
+    #
+    # The message id matters as much as the ticket id. The list previews a
+    # ticket's newest message; in a search it has to preview the message that
+    # matched, or a hit shows "Thanks, that worked" and you cannot see why it
+    # is in your results.
+    def ticket_matches(query, limit: 200)
+      sanitized = sanitize(query)
+      return {} if sanitized.blank?
+
+      rows = ApplicationRecord.connection.select_rows(
+        ApplicationRecord.sanitize_sql_array([<<~SQL, sanitized, limit])
+          SELECT ticket_id, message_id FROM (
+            SELECT ticket_id, message_id, rank,
+                   ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY rank) AS n
+            FROM (
+              SELECT messages.ticket_id AS ticket_id,
+                     messages.id        AS message_id,
+                     bm25(messages_fts) AS rank
+              FROM messages_fts
+              JOIN messages ON messages.id = messages_fts.rowid
+              WHERE messages_fts MATCH ?
+            )
+          )
+          WHERE n = 1
+          ORDER BY rank
+          LIMIT ?
+        SQL
+      )
+
+      rows.to_h
+    end
   end
 end

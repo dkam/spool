@@ -17,6 +17,34 @@
           class: "hover:no-underline #{chip_class(controller_name == "tickets")}" %>
   </nav>
 
+  <%# Search lives in the header rather than on the inbox because the moment it
+      earns its keep is mid-reply — "what did we tell them last time" — and that
+      happens on the ticket screen, where an inbox-only box would be two
+      navigations away.
+
+      Results always land on the inbox: search is a `?q=` narrowing of that
+      list, not a screen of its own. See search_frame_target for why the target
+      differs by screen, and search_controller.js for why that decides whether
+      it types ahead. %>
+  <%= form_with url: tickets_path, method: :get, class: "flex-1 max-w-[280px]",
+        data: {
+          controller: "search",
+          turbo_frame: search_frame_target,
+          action: "input->search#schedule keydown.esc->search#clear"
+        } do |form| %>
+    <%# The filters are the list's other narrowing and must survive a search;
+        without these, typing in the box would silently drop them. %>
+    <%= form.hidden_field :state, value: @state_filter, id: nil if @state_filter %>
+    <%= form.hidden_field :assignee, value: @assignee_filter, id: nil if @assignee_filter %>
+
+    <%= form.search_field :q, value: @query, placeholder: "Search",
+          autocomplete: "off",
+          data: { search_target: "field", shortcuts_target: "search" },
+          class: "w-full bg-transparent border-0 border-b border-rule p-0 pb-1 text-sm
+                  text-ink outline-none placeholder:text-faint
+                  focus:border-ink" %>
+  <% end %>
+
   <div class="ml-auto flex items-center gap-4 text-sm" data-controller="theme">
     <span class="font-mono text-faint"><%= mailbox_address %></span>
     <span class="w-px h-3.5 bg-rule"></span>

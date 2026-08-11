@@ -14,6 +14,17 @@ class TicketsController < ApplicationController
   def index
     @state_filter = params[:state].presence_in(STATE_FILTERS.keys)
     @assignee_filter = params[:assignee].presence
+    @query = params[:q].to_s.strip.presence
+
+    # Search is another narrowing of this list, not a screen of its own, so it
+    # composes with the filters above rather than replacing them.
+    if searching?
+      @matches = Search::Fts.ticket_matches(@query, limit: LIST_LIMIT)
+      # Capped independently of the tickets. Inheriting one cap would let the
+      # two sections disagree on screen about how much exists.
+      @customers = Customer.search(@query).to_a
+      @customer_counts = ticket_counts_for(@customers)
+    end
 
     @tickets = filtered_tickets
     @latest_messages = latest_messages_for(@tickets)
@@ -56,11 +67,25 @@ class TicketsController < ApplicationController
     params.expect(ticket: [:state, :assignee_id])
   end
 
+  # A query only becomes a search once it can mean something. One character
+  # matches most of the table, so below the floor the list stays as it was and
+  # the box just holds what you have typed so far.
+  def searching?
+    @query.present? && @query.length >= Customer::MIN_SEARCH_LENGTH
+  end
+  helper_method :searching?
+
   def filtered_tickets
     scope = Ticket.with_read_state_for(current_agent)
       .includes(:customer, :assignee)
       .recent_first
       .limit(LIST_LIMIT)
+
+    # A subquery, not joins(:messages). with_read_state_for LEFT JOINs
+    # ticket_reads and selects an extra column; joining messages as well would
+    # multiply a ticket by its matching messages, and the DISTINCT you would
+    # reach for to fix that collides with that select list.
+    scope = scope.where(id: @matches.keys) if searching?
 
     scope = scope.where(state: STATE_FILTERS.fetch(@state_filter)) if @state_filter
 
@@ -72,20 +97,43 @@ class TicketsController < ApplicationController
     end
   end
 
-  # The row preview is the newest message's excerpt. Fetched in one query for
-  # the whole page and indexed by ticket — ascending order means the last write
-  # of each key wins, which is the newest message.
+  # The row preview. Normally the newest message's excerpt; in a search, the
+  # message that actually matched.
+  #
+  # That swap is the whole reason search needed a message id and not just a
+  # ticket id. Previewing the newest message in a result list shows you "Thanks,
+  # that worked" under a hit for "smtp_tls", and you cannot see why the ticket
+  # is in your results.
+  #
+  # Fetched in one query for the whole page and indexed by ticket — ascending
+  # order means the last write of each key wins, which is the newest message.
+  # Search returns exactly one message per ticket, so there is nothing to win.
   #
   # Deliberately a narrow select: Message#body decompresses a blob, and nothing
   # on this screen wants it.
   def latest_messages_for(tickets)
     return {} if tickets.empty?
 
-    Message
+    scope = Message
       .where(ticket_id: tickets.map(&:id))
       .select(:id, :ticket_id, :direction, :agent_id, :body_excerpt, :sent_at)
-      .order(:sent_at, :id)
-      .index_by(&:ticket_id)
+
+    return scope.where(id: @matches.values).index_by(&:ticket_id) if searching?
+
+    scope.order(:sent_at, :id).index_by(&:ticket_id)
+  end
+
+  # {customer_id => {"open" => 2, "closed" => 9}} for the People section, in one
+  # query rather than two per person.
+  def ticket_counts_for(customers)
+    return {} if customers.empty?
+
+    Ticket.where(customer_id: customers.map(&:id))
+      .group(:customer_id, :state)
+      .count
+      .each_with_object(Hash.new { |h, k| h[k] = Hash.new(0) }) do |((id, state), n), out|
+        out[id][state] = n
+      end
   end
 
   # Marking read is a write on a GET, which the database selector routes to the

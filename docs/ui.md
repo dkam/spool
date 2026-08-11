@@ -147,7 +147,8 @@ Stimulus only, one controller per behaviour, no inline handlers.
 | `composer` | Reply/note toggle, template panel, template insertion at the cursor. |
 | `notes` | Debounced customer-notes autosave, flushing on blur and `pagehide`. |
 | `autosubmit` | `requestSubmit()` on change — the assignee select. |
-| `shortcuts` | Keyboard navigation. See below. |
+| `shortcuts` | Keyboard navigation and the latch. See below. |
+| `search` | Debounced search-as-you-type, and Escape to clear. See below. |
 
 Two things worth knowing:
 
@@ -166,14 +167,51 @@ Modelled on Basecamp: **hold Shift and the shortcuts are live.**
 
 | Key | Does | Where |
 | --- | --- | --- |
-| `⇧J` / `⇧↓` | Next ticket | list |
-| `⇧K` / `⇧↑` | Previous ticket | list |
-| `⇧L` / `⇧→` | Open the selected ticket | list |
+| `⇧J` / `⇧↓` | Next ticket | any list |
+| `⇧K` / `⇧↑` | Previous ticket | any list |
+| `⇧L` / `⇧→` | Open the selected ticket | any list |
 | `⇧H` / `⇧←` | Back to the list | ticket |
+| `/` or `?` | Focus search | everywhere |
+| `⇧⇧` | Latch shortcut mode | everywhere |
+| `Esc` | Unlatch, or clear the search box | everywhere |
 
 Hold Shift for 400ms and a legend appears bottom-left saying what the current
 screen answers to. The keys work whether or not you wait for it — the legend is
 for people who haven't learned them, not a mode you have to enter.
+
+**`/` and `?` are the same physical key** and both focus search. Unshifted it
+types `/`; held with Shift — the gesture every other shortcut uses — it types
+`?`. Taking only one would mean the shortcut worked or didn't depending on a
+finger that makes no difference anywhere else. `/` alone is the single unshifted
+shortcut and a deliberate exception; being wrong costs a focused search box and
+an Escape. `?` is free because the legend appears on a held Shift rather than on
+a help key.
+
+### The latch
+
+**Tap Shift twice and the keys work unshifted** until you press Escape or click
+into a field. The legend stays up, takes the accent rule, and grows an `Esc
+Exit` item — while latched it isn't a hint any more, it's the only thing on
+screen explaining why bare keys are moving the page.
+
+It exists for search. After typing a query the caret is in the box and every
+shortcut is correctly suppressed, so **without it there is no keyboard route
+from the search box into the results you just asked for**. Two taps blurs the
+box and hands the keys back. Any other route — special-casing `⇧J` inside the
+search field, or Down-arrow-into-results — would have been a rule that applies
+to one field on one screen.
+
+Three details that are load-bearing:
+
+- **A tap is timed from the release**, and any other key in between disarms it.
+  Otherwise typing `HELLO` — shift, letter, shift, letter — would latch the mode
+  mid-word. There's a test that types exactly that.
+- **Focusing any field unlatches.** Escape alone would mean the mode could be
+  the reason a keystroke went missing from a reply.
+- **The latch survives navigation** (`sessionStorage`, per tab). It's a mode, so
+  it stays until you leave it — latch, walk the list, open a ticket, come back,
+  and it's still on. The legend is on screen throughout, which is what makes
+  that honest rather than a trap.
 
 **Shift is the entire guard against firing while someone types.** That is why it
 is worth keeping even though `j` alone would be more idiomatic: the protection is
@@ -237,6 +275,82 @@ read is a hollow one, so a *ringed* dot is the one shape left that neither can
 be confused with, and it stays legible sitting on top of either. It is a quiet
 mark by design; if it proves too quiet in use, the next step is a row wash, not
 a louder dot.
+
+## Search
+
+**There is no search screen.** Search is another narrowing of the ticket list —
+`?q=` alongside `?state=` and `?assignee=` — so it composes with the filters and
+inherits the `ticket_list` frame, `turbo_action: advance`, the keyboard targets
+and `_ticket_row` for nothing. A separate screen would need its own copy of all
+of that and would drift from the inbox the first time either changed.
+
+That also answers "how do you get back": you don't, because you never left. The
+search is a chip in the filter row like any other narrowing, and clearing it is
+the same gesture as clearing a state filter. Escape in the box does it too.
+
+**The box lives in the header**, not on the inbox, because the moment search
+earns its keep is mid-reply — *what did we tell them last time* — and that
+happens on the ticket screen.
+
+### Instant, but in the page
+
+Typing refreshes the `ticket_list` frame on a 220ms debounce; the frame's
+`turbo_action: advance` keeps the address bar in step. Results appear as you
+type, in the list you already know how to read, and every state you type through
+stays linkable and back-able. A dropdown gets none of that.
+
+The frame is also what makes it possible at all: only the frame swaps, so the
+header, the box and the caret in it are untouched. **Off the inbox there is no
+such frame**, so `ApplicationHelper#search_frame_target` sends the form to `_top`
+instead and the controller doesn't type ahead — a full navigation per keystroke
+would replace `<body>` and throw the caret away mid-word. Enter still works.
+
+### Two kinds of answer, two sections
+
+| | Matched by | Shown as |
+| --- | --- | --- |
+| **People** | `Customer.search` — LIKE over name and email | one row per person, capped at 5, linking to `customers/show` |
+| **Tickets** | `Search::Fts.ticket_matches` — FTS5 over `messages.subject` and `body_excerpt` | normal ticket rows |
+
+A person match isn't a smaller ticket match, it's a different kind of answer.
+Ranking them into one list would mean someone with forty tickets buries every
+message that actually contained the word you typed — and the useful answer to a
+person's name is the person, once. `customers/show` is already the screen that
+lists all their tickets, so the row is a pointer rather than an expansion.
+
+**People deliberately ignore the state and assignee filters.** A person is not
+open or waiting.
+
+### The traps, and what each one costs
+
+- **LIKE for customers, FTS for content, and it's capability not cost.** What
+  you want from an address is *infix* — `ilne` → `Milne`, `field` →
+  `dana@fieldworks.co`. FTS5 only does prefix, so it can't answer either without
+  the trigram tokeniser. There is also nowhere to put customers in
+  `messages_fts`: it's external-content keyed `content_rowid='id'` on messages,
+  so the rowid space is already spoken for. See architecture.md.
+- **`% and _` are escaped** in the LIKE pattern, with `ESCAPE '\'` — and so is
+  the backslash itself, which is the half that's usually forgotten.
+- **The cap counts tickets, not messages.** `ticket_matches` collapses to one
+  row per ticket *inside SQLite* with a window function, then limits. Capping
+  the FTS query instead — 200 matching messages might be 12 tickets — truncates
+  invisibly. `Message.search` still caps at messages, which is right at message
+  granularity and wrong at ticket granularity; that's why this doesn't wrap it.
+- **A result previews the message that matched**, not the newest one. Otherwise
+  a hit for `smtp_tls` shows "Thanks, that worked" and you can't see why it's in
+  your results. That's the whole reason the search returns a message id.
+- **`where(id: …)`, never `joins(:messages)`.** `with_read_state_for` already
+  LEFT JOINs and adds a select; joining messages too multiplies a ticket by its
+  matching messages, and the DISTINCT you'd reach for collides with that select.
+- **`body_excerpt` is quote-stripped**, so quoted history isn't searchable. That
+  is right — otherwise every thread matches every phrase anyone ever quoted into
+  it — but it's surprising enough to be worth saying out loud.
+- **The filter can silently eat a search.** Searching while a stale `state=`
+  filter is on looks identical to no results. The empty state says *"in this
+  filter"* and offers a link that drops it, without claiming there's anything
+  there.
+- **Two characters minimum.** Below that the list stays as it was rather than
+  being narrowed by a letter that matches most of the table.
 
 ## Turbo
 

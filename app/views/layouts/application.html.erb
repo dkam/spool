@@ -56,6 +56,12 @@
                   bg-canvas border-t border-r border-rule-strong
                   text-2xs uppercase tracking-[0.09em] text-faint">
         <%= yield :shortcuts %>
+
+        <%# Only while latched. Held-Shift needs no exit instructions — you let
+            go. A latch does, and this is the only thing on screen explaining
+            why bare keys are moving the page. %>
+        <span data-shortcuts-target="latch" hidden
+              class="flex items-center gap-2 text-ink"><kbd>Esc</kbd> Exit</span>
       </div>
     <% end %>
   </body>
