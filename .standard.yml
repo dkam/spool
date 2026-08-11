@@ -1,0 +1,16 @@
+ignore:
+  - 'bin/**/*'
+  - 'db/schema.rb'
+  - 'db/**/*_schema.rb'
+  - 'tmp/**/*'
+  - 'vendor/**/*'
+  - 'node_modules/**/*'
+
+  # `keyword_init: true` is not redundant on these: it *forbids* positional
+  # construction. Ingest::MimeSplitter::Result has five fields and
+  # Ingest::Inbound::Result has four — building either positionally is exactly
+  # the mistake worth blocking at the constructor.
+  - 'app/services/ingest/inbound.rb':
+    - Style/RedundantStructKeywordInit
+  - 'app/services/ingest/mime_splitter.rb':
+    - Style/RedundantStructKeywordInit

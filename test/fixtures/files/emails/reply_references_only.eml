@@ -1,0 +1,11 @@
+Return-Path: <ada@example.com>
+Message-ID: <CAFdeadbeef01@mail.example.com>
+References: <not-a-message-we-know@elsewhere.test> <CAF1a2b3c4d5@mail.example.com>
+Date: Tue, 11 Aug 2026 12:40:00 +1000
+From: Ada Lovelace <ada@example.com>
+To: Support <support@spool.test>
+Subject: Re: Printer catches fire when printing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+One more thing — it also smells of burning plastic.

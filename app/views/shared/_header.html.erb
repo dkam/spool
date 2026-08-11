@@ -1,0 +1,43 @@
+<%#
+  The header bar. 58px tall, one rule beneath it, nothing else — the design
+  carries structure with alignment and dividers rather than surfaces.
+
+  The design's nav switched between the three canvas screens. Here Ticket and
+  Customer are drill-downs you reach by clicking a row, so the nav carries only
+  the destinations you can actually navigate to.
+%>
+<header class="flex items-center gap-10 px-14 h-[58px] border-b border-rule">
+  <%= link_to root_path, class: "flex items-baseline gap-[7px] font-semibold tracking-[-0.01em] hover:no-underline" do %>
+    Spool
+    <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
+  <% end %>
+
+  <nav class="flex gap-[22px] text-mid">
+    <%= link_to "Tickets", root_path,
+          class: "hover:no-underline #{chip_class(controller_name == "tickets")}" %>
+  </nav>
+
+  <div class="ml-auto flex items-center gap-4 text-sm" data-controller="theme">
+    <span class="font-mono text-faint"><%= mailbox_address %></span>
+    <span class="w-px h-3.5 bg-rule"></span>
+
+    <%# Theme is a client-side preference the server never sees, so these two
+        style themselves from localStorage on connect rather than from Rails. %>
+    <button type="button"
+            data-theme-target="option"
+            data-theme-value-param="light"
+            data-action="theme#choose"
+            class="cursor-pointer text-soft hover:text-ink">Light</button>
+    <button type="button"
+            data-theme-target="option"
+            data-theme-value-param="dark"
+            data-action="theme#choose"
+            class="cursor-pointer text-soft hover:text-ink">Dark</button>
+
+    <% if authenticated? %>
+      <span class="w-px h-3.5 bg-rule"></span>
+      <%= button_to "Sign out", logout_path, method: :delete,
+            class: "cursor-pointer text-soft hover:text-ink hover:underline" %>
+    <% end %>
+  </div>
+</header>

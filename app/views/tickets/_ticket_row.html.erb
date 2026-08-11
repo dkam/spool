@@ -1,0 +1,61 @@
+<%#
+  One row of a ticket list. Shared by the inbox and the customer screen — the
+  customer screen already knows whose tickets these are, so it drops the
+  customer and assignee columns via the `compact` local.
+
+  Locals: ticket, latest (Message or nil), agents_by_id, compact (bool)
+
+  `ticket.unread?` reads an attribute joined on by .with_read_state_for and
+  raises if that scope wasn't used — so both callers must load through it.
+
+  turbo_frame: "_top" is load-bearing on the inbox. These rows render inside the
+  ticket_list frame, so without it Turbo scopes the visit to that frame, finds
+  no matching frame in tickets/show, and replaces the row with "Content
+  missing". On the customer screen there is no enclosing frame and it's a no-op.
+%>
+<% unread = ticket.unread? %>
+
+<%= link_to ticket_path(ticket),
+      data: {
+        turbo_frame: "_top",
+        ticket_id: ticket.id,
+        shortcuts_target: "row",
+        action: "click->shortcuts#enter"
+      },
+      class: "relative grid grid-cols-[1fr_132px] gap-6 #{compact ? "py-[15px]" : "py-[17px]"} pr-3 border-b border-rule hover:bg-hover hover:no-underline" do %>
+
+  <%# The rail dot: filled accent when unread, a hollow ink ring when read.
+      Sits on the vertical rule drawn by the list container. The `rail-dot`
+      class is the hook the keyboard selection restyles it through — see
+      `[data-selected]` in the stylesheet. %>
+  <span class="rail-dot absolute -left-[30px] <%= compact ? "top-5" : "top-[22px]" %> w-[9px] h-[9px] rounded-full <%= unread ? "bg-accent" : "bg-canvas border border-ink" %>"></span>
+
+  <div class="min-w-0">
+    <div class="tracking-[-0.01em] <%= unread ? "font-bold" : "font-medium" %>">
+      <%= ticket_subject(ticket) %>
+    </div>
+
+    <% unless compact %>
+      <div class="mt-[3px] text-sm text-soft flex gap-2 items-baseline">
+        <span><%= ticket.customer.display_name %></span>
+        <span class="font-mono text-faint text-xs truncate"><%= ticket.customer.email %></span>
+      </div>
+    <% end %>
+
+    <% if (preview = preview_text(latest, agents_by_id)).present? %>
+      <div class="<%= compact ? "mt-[5px]" : "mt-1.5" %> text-sm text-soft truncate max-w-[620px]">
+        <%= preview %>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="text-right">
+    <div class="text-sm text-soft"><%= ticket_time(ticket.last_activity_at) %></div>
+    <div class="mt-[5px] text-2xs tracking-[0.09em] uppercase text-faint">
+      <%= ticket_state_label(ticket) %>
+    </div>
+    <% unless compact %>
+      <div class="mt-1 text-xs text-faint"><%= ticket_assignee_label(ticket) %></div>
+    <% end %>
+  </div>
+<% end %>

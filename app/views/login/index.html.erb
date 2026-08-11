@@ -1,0 +1,75 @@
+<%#
+  The only screen a locked-out person ever sees, so it is the whole brand in one
+  view: the wordmark, the accent dot, and nothing else. Flush left rather than
+  centred — Modernist doesn't centre copy — and set on the same rules and tokens
+  as the rest of the app.
+
+  The layout's header renders above this. That is deliberate: seeing the product
+  chrome while signed out is reassuring, not confusing.
+%>
+<div class="max-w-[520px] px-14 pt-24 pb-24">
+  <h1 class="flex items-baseline gap-2 text-title font-bold tracking-[-0.02em]">
+    Spool
+    <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
+  </h1>
+
+  <% if flash[:alert] %>
+    <p class="mt-6 pl-4 border-l-2 border-accent text-sm text-soft"><%= flash[:alert] %></p>
+  <% end %>
+
+  <% if flash[:notice] %>
+    <p class="mt-6 pl-4 border-l-2 border-rule-strong text-sm text-soft"><%= flash[:notice] %></p>
+  <% end %>
+
+  <div class="mt-8 pt-6 border-t border-rule-strong">
+    <% if authenticated? %>
+      <p class="font-semibold">You are signed in</p>
+      <p class="mt-1.5 text-sm text-soft">
+        as <span class="font-mono text-xs text-ink"><%= current_user_email %></span><%=
+          " via #{current_user_provider}" if current_user_provider %>
+      </p>
+      <p class="mt-6">
+        <%= link_to root_path, class: "inline-flex items-center gap-2.5 font-semibold text-ink hover:underline" do %>
+          <span class="w-[7px] h-[7px] rounded-full bg-accent"></span>
+          Continue
+        <% end %>
+      </p>
+
+    <% elsif SpoolAuthorization.oidc_configured? %>
+      <p class="text-sm text-soft">Sign in with your identity provider to continue.</p>
+      <p class="mt-6">
+        <%= link_to "/login/start", class: "inline-flex items-center gap-2.5 font-semibold text-ink hover:underline" do %>
+          <span class="w-[7px] h-[7px] rounded-full bg-accent"></span>
+          Sign in with <%= ENV.fetch("OIDC_PROVIDER_NAME", "OpenID Connect") %>
+        <% end %>
+      </p>
+
+    <% elsif SpoolAuthorization.oidc_misconfigured? %>
+      <%# Half-configured. Name the missing variables rather than making the
+          operator guess which of the three it was. %>
+      <p class="font-semibold">Authentication is half-configured</p>
+      <p class="mt-1.5 text-sm text-soft max-w-[440px] leading-message">
+        Some OpenID Connect settings are present but not all of them, so Spool is
+        refusing to serve rather than run unauthenticated. Missing:
+      </p>
+      <ul class="mt-4 border-t border-rule">
+        <% SpoolAuthorization.missing_oidc_vars.each do |var| %>
+          <li class="py-2.5 border-b border-rule font-mono text-xs text-ink"><%= var %></li>
+        <% end %>
+      </ul>
+
+    <% else %>
+      <p class="font-semibold">Authentication is not enabled</p>
+      <p class="mt-1.5 text-sm text-soft max-w-[440px] leading-message">
+        No OpenID Connect provider is configured, so Spool is running open and every
+        request acts as the development agent. There is nothing to sign in to.
+      </p>
+      <p class="mt-6">
+        <%= link_to root_path, class: "inline-flex items-center gap-2.5 font-semibold text-ink hover:underline" do %>
+          <span class="w-[7px] h-[7px] rounded-full bg-accent"></span>
+          Continue
+        <% end %>
+      </p>
+    <% end %>
+  </div>
+</div>

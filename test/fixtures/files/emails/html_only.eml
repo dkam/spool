@@ -1,0 +1,14 @@
+Return-Path: <grace@example.com>
+Message-ID: <CAFhtmlonly001@mail.example.com>
+Date: Tue, 11 Aug 2026 18:10:00 +1000
+From: Grace Hopper <grace@example.com>
+To: Support <support@spool.test>
+Subject: Cannot log in to the portal
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<html><body style="font-family: Arial">
+<p>Hi there,</p>
+<p>I <b>cannot</b> log in to the portal &mdash; it says &quot;account locked&quot;.</p>
+<p>Regards,<br>Grace</p>
+</body></html>

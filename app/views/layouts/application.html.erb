@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html data-theme="light">
+  <head>
+    <title><%= content_for(:title) || "Spool" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Spool">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%# Runs before first paint so a dark-theme user never sees a white flash.
+        Stimulus connects too late for this — by then the page has painted.
+        Turbo replaces <body> and leaves <html> alone, so the attribute set
+        here survives every subsequent navigation and this only runs once. %>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("spool:theme");
+          if (stored === "dark" || stored === "light") {
+            document.documentElement.setAttribute("data-theme", stored);
+          }
+        } catch (e) {
+          /* Private browsing with storage disabled — the light default stands. */
+        }
+      })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400&display=swap">
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <%# Shortcuts hang off <body> so they work before anything has been clicked,
+      and so each screen only has to declare the targets it offers. %>
+  <body class="min-h-screen bg-canvas text-ink" data-controller="shortcuts">
+    <%= render "shared/header" %>
+
+    <%= yield %>
+
+    <%# Shortcut mode: hold Shift for a moment and the screen says what it
+        answers to. The keys work whether or not you wait for this. Screens
+        with nothing to offer render no legend and Shift does nothing. %>
+    <% if content_for?(:shortcuts) %>
+      <div data-shortcuts-target="hint" hidden
+           class="fixed left-0 bottom-0 z-10 flex items-center gap-5 h-9 px-5
+                  bg-canvas border-t border-r border-rule-strong
+                  text-2xs uppercase tracking-[0.09em] text-faint">
+        <%= yield :shortcuts %>
+      </div>
+    <% end %>
+  </body>
+</html>

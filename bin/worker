@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Force unbuffered output. Without this Ruby fully buffers when stdout is a pipe
+# (docker log capture), and a long-running idle worker appears silent for hours
+# while its log lines sit in a 4KB buffer.
+STDOUT.sync = true
+STDERR.sync = true
+
+require_relative "../config/environment"
+
+# Role selects which consumers this process runs — see Ingest::Worker::ROLES.
+role = ARGV[0] || ENV["WORKER_ROLE"] || "all"
+consumers = Ingest::Worker.consumers_for(role)
+
+shutdown = lambda do |signal|
+  # STDERR.puts, not Rails.logger: Logger takes a mutex, which can't be acquired
+  # from a Ruby signal-trap context.
+  STDERR.puts "[Worker:#{role}] received #{signal}, draining and exiting"
+  consumers.each(&:stop!)
+end
+
+trap("INT") { shutdown.call("SIGINT") }
+trap("TERM") { shutdown.call("SIGTERM") }
+
+Rails.logger.info "[Worker:#{role}] starting #{consumers.size} consumer(s)"
+consumers.map { |c| Thread.new { c.run } }.each(&:join)

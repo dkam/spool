@@ -1,0 +1,23 @@
+Return-Path: <grace@example.com>
+Message-ID: <CAFattach0002@mail.example.com>
+Date: Tue, 11 Aug 2026 17:45:00 +1000
+From: Grace Hopper <grace@example.com>
+To: Support <support@spool.test>
+Subject: Same logo attached
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="MIXED2"
+
+--MIXED2
+Content-Type: text/plain; charset=UTF-8
+
+Different sender, identical signature logo.
+
+--MIXED2
+Content-Type: image/png; name="image001.png"
+Content-Disposition: attachment; filename="image001.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM
+IQAAAABJRU5ErkJggg==
+
+--MIXED2--

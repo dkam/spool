@@ -1,0 +1,9 @@
+web: bin/rails server
+worker: bin/worker all
+scheduler: bin/scheduler
+css: bin/rails tailwindcss:watch
+# Tuber (the work queue) runs in Docker so there's nothing to install. Prefer a
+# native binary? `brew install tuberq/tuber/tuber`, then comment out the docker
+# line and uncomment this one:
+#   tuber: tuber server -p 11300 --name "Spool Tuber"
+tuber: docker run --rm -e TUBER_LISTEN=0.0.0.0 -p 11300:11300 --name spool-dev-tuber ghcr.io/tuberq/tuber:latest server

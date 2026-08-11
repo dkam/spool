@@ -1,0 +1,76 @@
+<% content_for :title, "#{ticket_subject(@ticket)} · Spool" %>
+
+<% content_for :shortcuts do %>
+  <span class="flex items-center gap-2"><kbd>H</kbd> Back to tickets</span>
+<% end %>
+
+<div class="max-w-[880px] px-14 pt-11 pb-30">
+  <div class="flex items-baseline gap-3 text-sm text-soft">
+    <%# Doubles as the keyboard's way out: H returns to the list this ticket
+        was opened from, falling back to this href when there wasn't one. %>
+    <%= link_to "Tickets", root_path,
+          data: { shortcuts_target: "back", ticket_id: @ticket.id },
+          class: "hover:text-ink hover:no-underline" %>
+    <span class="text-faint">/</span>
+    <span class="font-mono text-faint">#<%= @ticket.id %></span>
+  </div>
+
+  <h1 class="text-title font-bold tracking-[-0.02em] mt-2.5"><%= ticket_subject(@ticket) %></h1>
+
+  <div class="flex items-baseline gap-5 flex-wrap mt-3 pb-4 border-b border-rule text-sm text-soft">
+    <div class="flex items-baseline gap-2">
+      <%= link_to @ticket.customer.display_name, customer_path(@ticket.customer),
+            class: "text-ink hover:underline" %>
+      <span class="font-mono text-xs text-faint"><%= @ticket.customer.email %></span>
+    </div>
+
+    <span class="uppercase tracking-[0.09em] text-2xs text-faint">
+      <%= ticket_state_label(@ticket) %> · <%= assignment_phrase(@ticket) %>
+    </span>
+
+    <div class="ml-auto flex items-baseline gap-5">
+      <%# Assign is a select rather than the design's plain button: the design
+          had nowhere to put the list of agents, and a native select is the
+          smallest thing that can actually carry it. Styled down to read as the
+          text button it sits beside. %>
+      <%= form_with model: @ticket, method: :patch, data: { controller: "autosubmit" } do |form| %>
+        <%= form.select :assignee_id,
+              @agents.map { |agent| [ agent.display_name, agent.id ] },
+              { include_blank: "Unassigned" },
+              data: { action: "change->autosubmit#submit" },
+              class: "cursor-pointer bg-transparent text-soft hover:text-ink border-0 p-0 text-sm focus:text-ink" %>
+      <% end %>
+
+      <%# Closed tickets reopen from the same spot rather than growing a fourth
+          control — it is the same lever, thrown the other way. %>
+      <% if @ticket.state == "closed" %>
+        <%= button_to "Reopen", ticket_path(@ticket), method: :patch,
+              params: { ticket: { state: "open" } },
+              class: "cursor-pointer text-soft hover:text-ink" %>
+      <% else %>
+        <%= button_to "Close", ticket_path(@ticket), method: :patch,
+              params: { ticket: { state: "closed" } },
+              class: "cursor-pointer text-soft hover:text-ink" %>
+      <% end %>
+    </div>
+  </div>
+
+  <% if flash[:alert] %>
+    <p class="mt-4 text-sm text-accent"><%= flash[:alert] %></p>
+  <% end %>
+
+  <div class="relative pl-[30px] mt-8">
+    <div class="absolute left-1 top-0 bottom-0 w-px bg-rule"></div>
+
+    <% @messages.each_with_index do |message, index| %>
+      <%# The accent dot marks the newest entry, and only when the ticket was
+          unread on arrival — otherwise every ticket you reopen shouts at you
+          about something you have already read. %>
+      <%= render "tickets/message",
+            message: message,
+            accent: @arrived_unread && index == @messages.size - 1 && message.inbound? %>
+    <% end %>
+  </div>
+
+  <%= render "tickets/composer", ticket: @ticket, templates: @templates %>
+</div>

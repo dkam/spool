@@ -1,0 +1,42 @@
+Return-Path: <ada@example.com>
+Message-ID: <CAFattach0001@mail.example.com>
+Date: Tue, 11 Aug 2026 17:20:00 +1000
+From: Ada Lovelace <ada@example.com>
+To: Support <support@spool.test>
+Subject: Photo of the fire
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="MIXED_BOUNDARY"
+
+--MIXED_BOUNDARY
+Content-Type: multipart/alternative; boundary="ALT_BOUNDARY"
+
+--ALT_BOUNDARY
+Content-Type: text/plain; charset=UTF-8
+
+Here is a photo of the printer on fire, plus our company logo below.
+
+--ALT_BOUNDARY
+Content-Type: text/html; charset=UTF-8
+
+<html><body><p>Here is a photo of the printer on fire, plus our company logo below.</p><img src="cid:logo-001"></body></html>
+
+--ALT_BOUNDARY--
+
+--MIXED_BOUNDARY
+Content-Type: image/png; name="fire.png"
+Content-Disposition: attachment; filename="fire.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM
+IQAAAABJRU5ErkJggg==
+
+--MIXED_BOUNDARY
+Content-Type: image/png; name="logo.png"
+Content-Disposition: inline; filename="logo.png"
+Content-ID: <logo-001>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM
+IQAAAABJRU5ErkJggg==
+
+--MIXED_BOUNDARY--

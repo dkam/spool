@@ -1,0 +1,41 @@
+<%#
+  State and assignee filters. Plain links, not a form: each is a GET that
+  changes the query string, which keeps a filtered list linkable and the back
+  button meaningful.
+
+  Rendered inside the ticket_list turbo-frame along with the list itself, so
+  clicking one swaps both the rows and the chips' own active state.
+%>
+<div class="flex flex-wrap gap-7 mt-[26px] pb-3.5 border-b border-rule text-sm">
+  <div class="flex items-baseline gap-3.5">
+    <span class="text-faint">State</span>
+
+    <%= link_to "All", tickets_path(assignee: @assignee_filter),
+          class: "hover:no-underline #{chip_class(@state_filter.nil?)}" %>
+
+    <% TicketsHelper::STATE_FILTER_LABELS.each do |value, label| %>
+      <%= link_to label, tickets_path(state: value, assignee: @assignee_filter),
+            class: "hover:no-underline #{chip_class(@state_filter == value)}" %>
+    <% end %>
+  </div>
+
+  <div class="flex items-baseline gap-3.5">
+    <span class="text-faint">Assignee</span>
+
+    <%= link_to "Anyone", tickets_path(state: @state_filter),
+          class: "hover:no-underline #{chip_class(@assignee_filter.nil?)}" %>
+
+    <%= link_to "Me", tickets_path(state: @state_filter, assignee: "me"),
+          class: "hover:no-underline #{chip_class(@assignee_filter == "me")}" %>
+
+    <% @agents.each do |agent| %>
+      <% next if agent.id == current_agent&.id %>
+      <%= link_to agent.display_name.split(/\s+/).first,
+            tickets_path(state: @state_filter, assignee: agent.id),
+            class: "hover:no-underline #{chip_class(@assignee_filter == agent.id.to_s)}" %>
+    <% end %>
+
+    <%= link_to "Unassigned", tickets_path(state: @state_filter, assignee: "unassigned"),
+          class: "hover:no-underline #{chip_class(@assignee_filter == "unassigned")}" %>
+  </div>
+</div>

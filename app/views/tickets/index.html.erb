@@ -1,0 +1,46 @@
+<% content_for :title, "Tickets · Spool" %>
+
+<% content_for :shortcuts do %>
+  <span class="flex items-center gap-2"><kbd>J</kbd><kbd>K</kbd> Move</span>
+  <span class="flex items-center gap-2"><kbd>L</kbd> Open</span>
+<% end %>
+
+<div class="max-w-[1000px] px-14 pt-12 pb-24">
+  <div class="flex items-baseline gap-4">
+    <h1 class="text-title font-bold tracking-[-0.02em]">Tickets</h1>
+    <%# "open" is a state, not a countable noun — pluralize would say "3 opens". %>
+    <span class="text-sm text-soft">
+      <%= @open_count %> open, <%= @unread_count %> unread
+    </span>
+  </div>
+
+  <%# Filters and rows share a frame so a filter click swaps both the list and
+      the chips' own active state in one request. turbo-action="advance" keeps
+      the address bar in step, so a filtered inbox stays linkable and the back
+      button still works. %>
+  <%= turbo_frame_tag "ticket_list", data: { turbo_action: "advance" } do %>
+    <%= render "filters" %>
+
+    <% if @tickets.any? %>
+      <div class="relative pl-[30px] mt-1.5">
+        <%# The vertical rule the row dots sit on. %>
+        <div class="absolute left-1 top-0 bottom-0 w-px bg-rule"></div>
+
+        <% @tickets.each do |ticket| %>
+          <%= render "tickets/ticket_row",
+                ticket: ticket,
+                latest: @latest_messages[ticket.id],
+                agents_by_id: @agents_by_id,
+                compact: false %>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="mt-10 text-sm text-soft">
+        Nothing here.
+        <% if @state_filter || @assignee_filter %>
+          <%= link_to "Clear the filters", tickets_path, class: "text-ink underline" %> to see every ticket.
+        <% end %>
+      </p>
+    <% end %>
+  <% end %>
+</div>

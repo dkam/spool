@@ -1,0 +1,22 @@
+Return-Path: <ada@example.com>
+Received: from mail.example.com (mail.example.com [198.51.100.10])
+	by mx.spool.test (Postfix) with ESMTPS id 4A2B1C
+	for <support@spool.test>; Tue, 11 Aug 2026 09:14:22 +1000 (AEST)
+Message-ID: <CAF1a2b3c4d5@mail.example.com>
+Date: Tue, 11 Aug 2026 09:14:20 +1000
+From: Ada Lovelace <ada@example.com>
+To: Support <support@spool.test>
+Subject: Printer catches fire when printing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Hello,
+
+Every time I print a double-sided document the printer catches fire.
+It is a LaserJet 4100. This has happened three times this week.
+
+Is this covered under warranty?
+
+Thanks,
+Ada

@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Spool — design tokens.
+
+   Ported from the Claude Design project "Spool" (Spool.dc.html), which scopes
+   its look to a `.spool` block of CSS variables. Those variables become
+   Tailwind v4 theme tokens here, so every utility (`text-ink`, `border-rule`,
+   `bg-accent`, …) resolves through them.
+
+   The dark theme re-declares the same variables under [data-theme="dark"].
+   Because Tailwind v4 utilities compile to `var(--color-*)` references rather
+   than baked-in hex values, that single override re-themes the whole app — no
+   `dark:` variant is needed on any element. See docs/ui.md.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Roles, not hues. `canvas` is the page ground, `ink` the primary text,
+     `soft`/`faint` the two supporting text weights, `rule`/`rule-strong` the
+     two divider weights, `hover` the row wash. */
+  --color-canvas: #ffffff;
+  --color-ink: #1c1b1a;
+  --color-soft: #6e6b66;
+  --color-faint: #a29e98;
+  --color-rule: #e6e4e1;
+  --color-rule-strong: #cdc9c4;
+  --color-hover: #faf9f8;
+  --color-accent: #f0592a;
+
+  --font-sans: Archivo, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* The design's type scale. `2xs` is the uppercase micro label, `title` the
+     screen heading; `base` is 15px, not Tailwind's default 16px. */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-mid: 14px;
+  --text-base: 15px;
+  --text-base--line-height: 1.55;
+  --text-title: 21px;
+  --text-title--line-height: 1.2;
+
+  /* Message copy is set looser than interface text. */
+  --leading-message: 1.75;
+}
+
+/* The dark theme. Only the colour roles change — type, spacing and structure
+   are shared. `data-theme` lives on <html> so it survives Turbo navigations. */
+[data-theme="dark"] {
+  --color-canvas: #121110;
+  --color-ink: #f1efec;
+  --color-soft: #948f88;
+  --color-faint: #6a6660;
+  --color-rule: #2b2927;
+  --color-rule-strong: #3d3a36;
+  --color-hover: #1a1918;
+  --color-accent: #f0592a;
+}
+
+@layer base {
+  html {
+    background: var(--color-canvas);
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Modernist keeps links as ink and underlines on hover rather than colouring
+     them; the accent is reserved for state, not for every link. */
+  a {
+    color: var(--color-ink);
+    text-decoration: none;
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Themed focus and selection — never the browser default ring. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  textarea::placeholder {
+    color: var(--color-faint);
+  }
+
+  /* Keys in the shortcut legend. Mono and ink so they read as things to press
+     rather than as more label text. */
+  kbd {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-ink);
+  }
+}
+
+/* The keyboard cursor, drawn on the rail dot the row already has rather than
+   as a second mark: an accent core, a ring of canvas, then a hairline of
+   accent. Unread is a filled dot and read is a hollow one, so a ringed dot is
+   the one shape left that neither can be confused with — and it survives
+   sitting on top of either. */
+a[data-selected] .rail-dot {
+  background: var(--color-accent);
+  border-color: transparent;
+  box-shadow:
+    0 0 0 2px var(--color-canvas),
+    0 0 0 3px var(--color-accent);
+}
+
+/* Set while the theme controller is applying a stored preference, so a theme
+   swap doesn't animate every colour on the page. */
+.theme-switching * {
+  transition: none !important;
+}

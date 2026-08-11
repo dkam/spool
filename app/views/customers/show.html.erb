@@ -1,0 +1,84 @@
+<% content_for :title, "#{@customer.display_name} · Spool" %>
+
+<%# This screen renders ticket rows from the shared partial, so it inherits
+    their `row` targets and J/K/L already work here. Without this declaration
+    they worked but nothing said so — the legend is how a screen admits what it
+    answers to. No H — not because it couldn't work, but because "back" from a
+    customer is ambiguous between the ticket list and the ticket you followed
+    the customer link from. See docs/ui.md. %>
+<% content_for :shortcuts do %>
+  <span class="flex items-center gap-2"><kbd>J</kbd><kbd>K</kbd> Move</span>
+  <span class="flex items-center gap-2"><kbd>L</kbd> Open</span>
+<% end %>
+
+<div class="max-w-[880px] px-14 pt-11 pb-30">
+  <div class="flex items-baseline gap-3 text-sm text-soft">
+    <%= link_to "Tickets", root_path, class: "hover:text-ink hover:no-underline" %>
+    <span class="text-faint">/</span>
+    <span>Customers</span>
+  </div>
+
+  <h1 class="text-title font-bold tracking-[-0.02em] mt-2.5"><%= @customer.display_name %></h1>
+  <div class="mt-2 font-mono text-sm text-soft"><%= @customer.email %></div>
+
+  <%# Four equal cells with a rule above and below — the modular grid the design
+      system asks for, and the reason these four facts read as one block.
+
+      Organisation is the email domain: there is no organisations table and
+      inferring it from the address is both accurate for the business customers
+      this is aimed at and honest about where it came from. The design's "Local
+      time" cell has no column behind it at all, so it is "Last heard from"
+      instead — a fact the schema actually holds, and a more useful one. %>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mt-8 py-[18px] border-t border-b border-rule">
+    <div>
+      <div class="text-2xs uppercase tracking-[0.09em] text-faint">Organisation</div>
+      <div class="mt-1.5"><%= @customer.email.split("@").last %></div>
+    </div>
+    <div>
+      <div class="text-2xs uppercase tracking-[0.09em] text-faint">First seen</div>
+      <div class="mt-1.5"><%= l(@customer.created_at.to_date, format: :long) %></div>
+    </div>
+    <div>
+      <div class="text-2xs uppercase tracking-[0.09em] text-faint">Tickets</div>
+      <div class="mt-1.5">
+        <%= @tickets.size %> total, <%= @tickets.count { |t| t.state == "open" } %> open
+      </div>
+    </div>
+    <div>
+      <div class="text-2xs uppercase tracking-[0.09em] text-faint">Last heard from</div>
+      <div class="mt-1.5"><%= ticket_time(@tickets.first&.last_activity_at) %></div>
+    </div>
+  </div>
+
+  <div class="mt-10 text-2xs uppercase tracking-[0.09em] text-faint">Tickets</div>
+  <div class="relative pl-[30px] mt-3.5">
+    <div class="absolute left-1 top-0 bottom-0 w-px bg-rule"></div>
+
+    <% @tickets.each do |ticket| %>
+      <%= render "tickets/ticket_row",
+            ticket: ticket,
+            latest: @latest_messages[ticket.id],
+            agents_by_id: @agents_by_id,
+            compact: true %>
+    <% end %>
+  </div>
+
+  <%# Notes save themselves. There is no submit button in the design and adding
+      one would be the wrong answer — this is a scratchpad, not a form. %>
+  <div class="mt-11 border-t border-rule-strong pt-4"
+       data-controller="notes"
+       data-notes-url-value="<%= customer_path(@customer) %>">
+    <div class="flex items-baseline gap-3">
+      <span class="text-2xs uppercase tracking-[0.09em] text-faint">Notes</span>
+      <span class="ml-auto text-xs text-faint" data-notes-target="status" aria-live="polite">
+        <%= @customer.notes.present? ? "Saved" : "" %>
+      </span>
+    </div>
+
+    <textarea data-notes-target="field"
+              data-action="input->notes#schedule"
+              rows="5"
+              placeholder="Anything the next person should know…"
+              class="block w-full max-w-[640px] mt-3 bg-transparent text-ink leading-message border-0 outline-none resize-y p-0 placeholder:text-faint"><%= @customer.notes %></textarea>
+  </div>
+</div>

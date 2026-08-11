@@ -1,0 +1,94 @@
+# SQLite, one file per concern. See docs/architecture.md.
+#
+# `primary` and `primary_replica` point at the SAME file. WAL mode means a
+# committed write is immediately visible to any new reader connection, so
+# there is no replication and no cutover delay — the split exists purely so a
+# slow read can't queue behind a write in the connection pool.
+#
+# On writer pool size: SQLite serialises writes regardless, so extra writer
+# connections buy no write throughput — but the Active Record pool governs
+# *checkout*, not writing, and a thread holds its connection for a whole unit of
+# work rather than just the moment it writes. Size the writer pool below the
+# thread count and "wait briefly for the write lock" (which busy_timeout handles
+# for us, at 10s) becomes ConnectionTimeoutError after 5s, which loses the job.
+# So: one connection per thread, and let SQLite do the serialising it was
+# already going to do.
+default: &default
+  adapter: sqlite3
+  timeout: 10000
+  # WAL with synchronous=NORMAL is the high-throughput SQLite configuration:
+  # readers never block writers, and there's one fsync per checkpoint rather
+  # than one per commit. cache_size is negative to mean KB rather than pages.
+  pragmas:
+    journal_mode: wal
+    synchronous: normal
+    foreign_keys: "on"
+    busy_timeout: 10000
+    cache_size: -64000      # ~64 MB page cache
+    mmap_size: 134217728    # 128 MB memory-mapped IO
+    temp_store: memory
+
+development:
+  primary:
+    <<: *default
+    database: storage/development.sqlite3
+    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  primary_replica:
+    <<: *default
+    database: storage/development.sqlite3
+    replica: true
+    pool: 5
+  cache:
+    <<: *default
+    database: storage/development_cache.sqlite3
+    migrations_paths: db/cache_migrate
+  cable:
+    <<: *default
+    database: storage/development_cable.sqlite3
+    migrations_paths: db/cable_migrate
+
+# Warning: The database defined as "test" will be erased and
+# re-generated from your development database when you run "rake".
+# Do not set this db to the same as development or production.
+#
+# No primary_replica here. Tests run inside a transaction on the writer
+# connection; a "replica" connection is a second connection to the same file
+# and would not see uncommitted fixture data, so every read would miss.
+# ApplicationRecord#connects_to handles this — see the model.
+test:
+  primary:
+    <<: *default
+    database: storage/test.sqlite3
+  cache:
+    <<: *default
+    database: storage/test_cache.sqlite3
+    migrations_paths: db/cache_migrate
+  cable:
+    <<: *default
+    database: storage/test_cable.sqlite3
+    migrations_paths: db/cable_migrate
+
+# Store production databases in storage/, mounted as a persistent Docker
+# volume in config/deploy.yml.
+#
+# Only production.sqlite3 needs backing up (Litestream, one dbs: entry). Cache
+# and cable are regenerable. With no Active Storage there is no loose-blob
+# directory, so that one file is the entire application state.
+production:
+  primary:
+    <<: *default
+    database: storage/production.sqlite3
+    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  primary_replica:
+    <<: *default
+    database: storage/production.sqlite3
+    replica: true
+    pool: 5
+  cache:
+    <<: *default
+    database: storage/production_cache.sqlite3
+    migrations_paths: db/cache_migrate
+  cable:
+    <<: *default
+    database: storage/production_cable.sqlite3
+    migrations_paths: db/cable_migrate

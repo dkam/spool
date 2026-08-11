@@ -1,0 +1,83 @@
+<%#
+  One entry in the thread. Three treatments, driven by direction:
+
+    inbound   flush left, hollow dot — the customer
+    outbound  indented 96px, hollow dot, "Sent to customer"
+    note      indented 96px, dashed dot, muted, "Internal note · not sent to
+              the customer"
+
+  The indent is what carries the conversation's two sides; the dashed dot and
+  the muted ink are what stop a note from ever reading as a sent reply. Both
+  requirements are in docs/ui-contract.md and are day-one, not polish.
+
+  Locals: message, accent (bool — the newest message, when it arrived unread)
+%>
+<article id="message-<%= message.id %>"
+         class="relative pb-10 <%= "pl-24" unless message.inbound? %>">
+
+  <span class="absolute -left-[30px] top-[7px] w-[9px] h-[9px] rounded-full <%=
+    if accent
+      "bg-accent"
+    elsif message.note?
+      "bg-canvas border border-dashed border-faint"
+    else
+      "bg-canvas border border-ink"
+    end
+  %>"></span>
+
+  <header class="flex items-baseline gap-2.5 <%= "text-soft" if message.note? %>">
+    <span class="<%= accent ? "font-bold" : "font-semibold" %>">
+      <%= message_author(message) %>
+    </span>
+
+    <% if message.inbound? && message.from_email.present? %>
+      <span class="font-mono text-xs text-faint"><%= message.from_email %></span>
+    <% elsif message.note? %>
+      <span class="text-2xs uppercase tracking-[0.09em] text-faint">
+        Internal note · not sent to the customer
+      </span>
+    <% else %>
+      <span class="text-2xs uppercase tracking-[0.09em] text-faint">Sent to customer</span>
+    <% end %>
+
+    <time class="ml-auto text-xs <%= accent ? "text-ink" : "text-faint" %>"
+          datetime="<%= message.sent_at&.iso8601 %>">
+      <%= message_time(message.sent_at) %>
+    </time>
+  </header>
+
+  <%# Notes are set a step smaller and softer than correspondence: they are
+      marginalia on the conversation, not part of it. %>
+  <div class="mt-3 max-w-[640px] leading-message text-pretty overflow-x-auto <%=
+        message.note? ? "text-mid text-soft mt-2.5" : "" %>">
+    <%= message_body(message) %>
+  </div>
+
+  <% if (files = message.message_attachments.reject(&:inline?)).any? %>
+    <div class="mt-3.5 flex flex-wrap items-baseline gap-x-3 gap-y-1.5 text-sm text-soft">
+      <% files.each do |file| %>
+        <%= link_to attachment_path(file), class: "font-mono text-xs hover:underline" do %>
+          <%= file.filename.presence || "attachment" %>
+        <% end %>
+        <span class="text-faint"><%= number_to_human_size(file.attachment.byte_size) %></span>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if (quoted = quoted_history(message)).present? %>
+    <div class="mt-4" data-controller="disclosure">
+      <button type="button"
+              data-action="disclosure#toggle"
+              data-disclosure-target="trigger"
+              aria-expanded="false"
+              class="cursor-pointer text-xs text-faint hover:text-ink border-b border-rule-strong">
+        Show quoted text
+      </button>
+
+      <div data-disclosure-target="panel" hidden
+           class="mt-3.5 pl-4 border-l border-rule max-w-[620px] text-sm leading-[1.7] text-soft whitespace-pre-wrap">
+        <%= quoted %>
+      </div>
+    </div>
+  <% end %>
+</article>

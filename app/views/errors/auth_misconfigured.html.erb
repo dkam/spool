@@ -1,0 +1,66 @@
+<%#
+  Rendered with layout: false, and styled inline rather than through the asset
+  pipeline. This page's whole job is to report that a variable is missing, and
+  it has to render even when something upstream of the layout or the assets is
+  unhappy.
+%><!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Spool — authentication misconfigured</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center;
+        justify-content: center; padding: 2rem 1rem; background: #f9fafb;
+        color: #111827; line-height: 1.5;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .card {
+        max-width: 34rem; width: 100%; background: #fff; border: 1px solid #e5e7eb;
+        border-radius: 0.5rem; padding: 1.5rem;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+      p { margin: 0 0 0.75rem; font-size: 0.925rem; }
+      ul { margin: 0 0 0.75rem; padding-left: 1.25rem; }
+      li { font-size: 0.925rem; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85em; background: #f3f4f6; border-radius: 0.25rem;
+        padding: 0.1rem 0.3rem;
+      }
+      .muted { color: #6b7280; font-size: 0.825rem; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #030712; color: #f3f4f6; }
+        .card { background: #111827; border-color: #1f2937; }
+        code { background: #1f2937; }
+        .muted { color: #9ca3af; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Authentication is half-configured</h1>
+
+      <p>
+        Spool found some OpenID Connect settings but not all of them, so it can't tell
+        whether this instance is meant to be open or protected. Rather than guess and
+        serve a helpdesk unauthenticated, it is refusing to serve at all.
+      </p>
+
+      <p>Set the missing variables and restart:</p>
+      <ul>
+        <% SpoolAuthorization.missing_oidc_vars.each do |var| %>
+          <li><code><%= var %></code></li>
+        <% end %>
+      </ul>
+
+      <p class="muted">
+        To run open — development only; Spool refuses to boot open in production —
+        unset <em>all</em> of
+        <code><%= SpoolAuthorization::OIDC_VARS.join("</code>, <code>").html_safe %></code>.
+      </p>
+    </div>
+  </body>
+</html>
