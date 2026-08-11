@@ -106,7 +106,7 @@ export default class extends Controller {
   // A filter that hides the remembered ticket simply shows no highlight; the
   // memory survives for when it comes back.
   rowTargetConnected(row) {
-    if (row.dataset.ticketId && row.dataset.ticketId === this.selectedId) {
+    if (row.dataset.rowId && row.dataset.rowId === this.selectedId) {
       row.dataset.selected = ""
     }
   }
@@ -114,7 +114,7 @@ export default class extends Controller {
   // Arriving at a ticket — by key, by click, or by pasted URL — makes it the
   // remembered row, so H always lands you back where you were looking.
   backTargetConnected(link) {
-    if (link.dataset.ticketId) this.selectedId = link.dataset.ticketId
+    if (link.dataset.rowId) this.selectedId = link.dataset.rowId
   }
 
   // Clicking a row has to leave the same trail as opening it from the
@@ -122,6 +122,11 @@ export default class extends Controller {
   enter(event) {
     const row = event.currentTarget
     this.select(row)
+
+    // Only tickets have a list to go back to. A person row leads to
+    // customers/show, which offers no H, so recording an origin for it would
+    // be storing an answer to a question that screen never asks.
+    if (!row.dataset.ticketId) return
 
     // Paired with the ticket rather than stored loose, so it can only ever
     // answer for the ticket it was recorded for. See back().
@@ -188,13 +193,13 @@ export default class extends Controller {
     this.rowTargets.forEach((other) => delete other.dataset.selected)
 
     row.dataset.selected = ""
-    this.selectedId = row.dataset.ticketId
+    this.selectedId = row.dataset.rowId
     row.scrollIntoView({ block: "nearest" })
   }
 
   get selectedRow() {
     const id = this.selectedId
-    return this.rowTargets.find((row) => row.dataset.ticketId === id) || null
+    return this.rowTargets.find((row) => row.dataset.rowId === id) || null
   }
 
   // The legend ------------------------------------------------------------

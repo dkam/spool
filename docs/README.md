@@ -21,6 +21,7 @@ recorded here, change the document in the same commit.
 | [ui-contract.md](ui-contract.md) | The model API the views are built against |
 | [ui.md](ui.md) | The screens: design tokens, screen anatomy, Stimulus and Turbo conventions |
 | [deploy.md](deploy.md) | Docker image, versioning, release, what CI runs |
+| [versioning-rollout.md](versioning-rollout.md) | Brief for porting this versioning scheme to the sibling repos |
 | [todo.md](todo.md) | What's built, what's next, open decisions |
 
 ## Orientation for someone (or something) new to the codebase

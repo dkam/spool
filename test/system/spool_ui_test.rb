@@ -286,6 +286,35 @@ class SpoolUiTest < ApplicationSystemTestCase
   # Selenium fires two taps within milliseconds; a person tapping a modifier
   # deliberately is far slower than that, and the window has to fit the hand
   # rather than the test harness.
+  # A search list holds two kinds of row. The cursor has to walk both, or the
+  # People section is visible to the eye and invisible to the keyboard.
+  test "j and k walk people as well as tickets in a search" do
+    # "dana" has to match both halves for this to test anything: the address
+    # via LIKE, and a message via FTS. The fixture ticket matches neither.
+    mentioned = Ticket.create!(customer: @customer, subject: "Signed off",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: mentioned, direction: "inbound", message_id: "<in-7@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Dana asked us to check.", "html" => nil}),
+      body_excerpt: "Dana asked us to check.")
+
+    visit tickets_path(q: "dana")
+    assert_text(/people/i)
+
+    press :shift, "j"
+    # People are rendered above the tickets, so the first row down is a person.
+    assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
+
+    press :shift, "j"
+    assert_selector "a[data-selected][data-row-id='ticket-#{mentioned.id}']"
+
+    press :shift, "k"
+    assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
+
+    press :shift, "l"
+    assert_current_path customer_path(@customer)
+  end
+
   test "a deliberate, human-paced double tap still latches" do
     visit root_path
 

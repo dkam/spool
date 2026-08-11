@@ -10,7 +10,7 @@
     <%# Doubles as the keyboard's way out: H returns to the list this ticket
         was opened from, falling back to this href when there wasn't one. %>
     <%= link_to "Tickets", root_path,
-          data: { shortcuts_target: "back", ticket_id: @ticket.id },
+          data: { shortcuts_target: "back", row_id: "ticket-#{@ticket.id}", ticket_id: @ticket.id },
           class: "hover:text-ink hover:no-underline" %>
     <span class="text-faint">/</span>
     <span class="font-mono text-faint">#<%= @ticket.id %></span>

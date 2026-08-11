@@ -18,6 +18,11 @@
 <%= link_to ticket_path(ticket),
       data: {
         turbo_frame: "_top",
+        # row_id is what the keyboard cursor tracks, because a search list also
+        # contains people and a person has no ticket id. ticket_id stays
+        # alongside it: it is what pairs a ticket with the list it was opened
+        # from, which only tickets do.
+        row_id: "ticket-#{ticket.id}",
         ticket_id: ticket.id,
         shortcuts_target: "row",
         action: "click->shortcuts#enter"

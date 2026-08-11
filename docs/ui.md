@@ -225,9 +225,19 @@ app — and **each screen declares what it offers by which targets it renders**:
 
 | Target | Rendered by | Gives |
 | --- | --- | --- |
-| `row` | `tickets/_ticket_row` | J / K / L |
+| `row` | `tickets/_ticket_row`, `tickets/_person_row` | J / K / L |
 | `back` | the ticket breadcrumb | H |
+| `search` | the header search box | `/` and `?` |
 | `hint` | the layout, from `content_for :shortcuts` | the legend |
+| `latch` | the layout | the `Esc Exit` item |
+
+**The cursor tracks `data-row-id`, not `data-ticket-id`**, because a search list
+holds two kinds of row and a person has no ticket id. Row ids are namespaced —
+`ticket-12`, `customer-3` — so J and K walk People and Tickets as one sequence
+and L opens whichever is under the cursor. `data-ticket-id` stays on ticket rows
+for a different job: pairing a ticket with the list it was opened from, which
+only tickets have. A person row deliberately records no origin, because
+`customers/show` offers no H for it to answer.
 
 A screen with none of them is inert, and nothing in the controller knows which
 screen it is on. Adding shortcuts to a new screen is `content_for :shortcuts`
