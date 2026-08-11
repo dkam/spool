@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Tailwind v4 auto-detects sources from the project root, and markdown is just
+   another file to the scanner — so it compiled utilities out of our own English
+   prose. The words "No rounded corners" in docs/ui.md generated
+   `.rounded{border-radius:.25rem}`, which is worse than the dead bytes: it made
+   the rule unenforceable by inspection, because anyone auditing the built
+   stylesheet found a radius utility present and reasonably concluded the rule
+   was aspirational. The documentation stating the rule was generating its own
+   counter-example. Removing docs/ drops .rounded, .invisible and .text-base,
+   none of which appear as a class in any template. */
+@source not "../../../docs";
+
 /* ══════════════════════════════════════════════════════════════════════════
    Spool — design tokens.
 
