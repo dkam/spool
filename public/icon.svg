@@ -1,3 +1,8 @@
 <svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="256" cy="256" r="256" fill="red"/>
+  <!-- #f0592a is --color-accent from app/assets/tailwind/application.css. This
+       and icon.png are the only places in the app where the accent is written
+       as a hex rather than resolved through a token, because a favicon cannot
+       read a CSS variable. Change it here and re-render the PNG with:
+         rsvg-convert -w 512 -h 512 public/icon.svg -o public/icon.png -->
+  <circle cx="256" cy="256" r="256" fill="#f0592a"/>
 </svg>

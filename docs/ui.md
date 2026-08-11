@@ -44,6 +44,11 @@ them:
 
 Roles, not hues — nothing in a template names a colour.
 
+The one exception is the favicon: `public/icon.svg`, its rendered `icon.png` and
+`manifest.json.erb`'s `theme_color` all write `#f0592a` literally, because none
+of them can read a CSS variable. If the accent ever changes, those three change
+by hand — the re-render command is in a comment in the SVG.
+
 **Dark theme is one block.** Tailwind v4 compiles utilities to `var(--color-*)`
 references rather than baked-in hex, so redeclaring the same variables under
 `[data-theme="dark"]` re-themes the entire app. There is no `dark:` variant
