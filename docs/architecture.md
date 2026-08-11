@@ -171,6 +171,42 @@ external-content FTS table reads the *content* table, so `SELECT count(*) FROM
 messages_fts` returns the messages count whether or not anything is indexed.
 Asking `messages_fts` whether it is indexed is measuring the wrong table.
 
+### One external-content index serves exactly one table
+
+`messages_fts` is declared `content='messages', content_rowid='id'`, which means
+it stores no text at all — only the inverted index, mapping token to rowid,
+where **the rowid _is_ `messages.id`**. Column values are read back out of
+`messages` on demand.
+
+That has a consequence worth stating before someone tries: **customers cannot go
+in this index.** The rowid space is already `messages.id`, so customer 5 and
+message 5 are the same document. There is physically nowhere to put a second
+entity.
+
+The escape is to drop external content and add discriminator columns
+(`kind`, `gid`, `text`), but then FTS5 stores its own copy of everything
+indexed — a second, uncompressed copy of every `body_excerpt` inside the file.
+That fights the constraint this whole document is built on. Don't.
+
+So a second searchable entity means either a second FTS table or a different
+mechanism. For **customers, the answer is `LIKE`, not FTS**, and the reason is
+capability rather than cost: FTS5 matches whole tokens and prefixes only, so
+`field` cannot reach `fieldworks.co` and `dana` cannot reach
+`sales+dana@corp.com` without the trigram tokeniser. `LIKE '%…%'` gets infix
+matching for free. It is a full scan, which at a few thousand customers is
+sub-millisecond and at 100k would not be — that is the point where a real
+`customers_fts` earns its keep, and by then it would want trigram anyway.
+
+Two smaller properties of the index that surprise people:
+
+- **`body_excerpt` is quote-stripped**, so the index covers the reply and not
+  the history quoted beneath it. Searching a phrase a customer quoted back at
+  you finds nothing. That is deliberate — otherwise every message in a thread
+  matches every phrase in it — but it does not announce itself.
+- **`Search::Fts.sanitize` preserves a trailing `*`**, so prefix queries already
+  work. `milne` matching "Dan Milne" needs nothing special; that is plain token
+  matching, not partial matching.
+
 ## The four screens
 
 1. **Ticket list** — filter by state and assignee, default "open, everything",
