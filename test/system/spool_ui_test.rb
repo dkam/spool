@@ -315,6 +315,53 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_current_path customer_path(@customer)
   end
 
+  # The cold visit above is the easy half. Nobody arrives at a search cold —
+  # they were already walking the list, so the cursor is already somewhere, and
+  # the question is what it means once the list underneath it has changed.
+  test "a search starts the cursor at the top of what it found" do
+    mentioned = Ticket.create!(customer: @customer, subject: "Signed off",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: mentioned, direction: "inbound", message_id: "<in-6@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Dana asked us to check.", "html" => nil}),
+      body_excerpt: "Dana asked us to check.")
+
+    # Down onto the ticket that the coming search will also match — the cursor
+    # has to survive the narrowing for this to test anything.
+    visit root_path
+    press :shift, "j"
+    press :shift, "j"
+    assert_selector "a[data-selected][data-row-id='ticket-#{mentioned.id}']"
+
+    press "/"
+    find_field("q").send_keys("dana")
+    assert_text(/people/i)
+
+    double_tap_shift
+    press "j"
+
+    # People are rendered first, so the first row down is a person — whatever
+    # the cursor was pointing at before the search was asked.
+    assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
+  end
+
+  # Same rule, the other way of asking a different question. Stated separately
+  # because the comment in the controller claims both and only one of them is
+  # the bug that was reported.
+  test "changing a filter starts the cursor at the top too" do
+    Ticket.create!(customer: @customer, subject: "Bounce report",
+      state: "open", last_activity_at: 2.hours.ago)
+
+    visit root_path
+    press :shift, "j"
+    press :shift, "j"
+    assert_selector "[data-selected]"
+
+    click_link "Open"
+    assert_current_path(/state=open/)
+    assert_no_selector "[data-selected]"
+  end
+
   test "a deliberate, human-paced double tap still latches" do
     visit root_path
 

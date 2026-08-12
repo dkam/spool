@@ -274,9 +274,22 @@ is load-bearing in two directions, and a loose string was wrong in both:
   refers to as superseded: `H` is safe to add there now, and stays out on taste.
 
 Restoring is done in `rowTargetConnected`, not in `connect`, because rows come
-and go every time the `ticket_list` frame re-renders. A filter that hides the
-remembered ticket simply shows no highlight and keeps the memory for when it
-comes back.
+and go every time the `ticket_list` frame re-renders.
+
+**A cursor belongs to a list**, so asking a different question starts it at the
+top of the answer. `turbo:frame-render` is the event that means exactly that —
+it fires when the frame is replaced by a new request, which is what a filter
+click and a search both do — and `clearSelection()` hangs off it. Coming back
+from a ticket is a page visit rather than a frame render, so that keeps its
+place, which is the memory anyone actually asked for.
+
+Without it the first `J` after a search lands somewhere that depends on whether
+the ticket you were looking at minutes ago happened to survive the narrowing:
+usually the top, silently not when it didn't. Searching a *person* is where that
+reads worst, because the row it skips is the People section — the thing you
+searched for. `clearSelection` strips `data-selected` as well as forgetting the
+id, since `rowTargetConnected` has already marked the surviving row by the time
+the frame finishes rendering.
 
 **The cursor is drawn on the rail dot the row already has** rather than as a
 second mark: an accent core, a ring of canvas, then a hairline of accent

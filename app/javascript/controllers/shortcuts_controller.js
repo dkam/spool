@@ -67,6 +67,21 @@ export default class extends Controller {
     // stray Shift latch the mode. Taken from booko's controller, which guards
     // the same case.
     this.onPointerDown = () => { this.tapArmed = false }
+    // A cursor belongs to a list. Ask a different question — a search, a filter
+    // — and the answer is a different list, so the cursor starts at the top of
+    // it rather than resuming from wherever you happened to be.
+    //
+    // Without this, the first J after a search lands somewhere that depends on
+    // whether the ticket you were looking at minutes ago happens to have
+    // survived the narrowing: usually the top, but silently not when it did.
+    // Searching a person is where that reads worst, because the row it skips is
+    // the People section — the thing you searched for.
+    //
+    // turbo:frame-render is exactly the event, and nothing else is: it fires
+    // when a frame is replaced by a new request, which is what asking a
+    // different question does. Coming back from a ticket is a page visit, so it
+    // still lands on the row you left.
+    this.onFrameRender = () => this.clearSelection()
 
     // On window rather than the element: the keys have to work before anything
     // on the page has been clicked, and an unfocused <body> receives nothing.
@@ -80,6 +95,7 @@ export default class extends Controller {
     // never be the reason a keystroke went missing from a reply.
     window.addEventListener("focusin", this.onFocusIn)
     window.addEventListener("pointerdown", this.onPointerDown)
+    window.addEventListener("turbo:frame-render", this.onFrameRender)
 
     // The latch outlives a navigation on purpose: latch, walk the list, open a
     // ticket, come back — the mode you turned on is still on. It is a mode, so
@@ -93,6 +109,7 @@ export default class extends Controller {
     window.removeEventListener("blur", this.onBlur)
     window.removeEventListener("focusin", this.onFocusIn)
     window.removeEventListener("pointerdown", this.onPointerDown)
+    window.removeEventListener("turbo:frame-render", this.onFrameRender)
     clearTimeout(this.hintTimer)
     this.hintTimer = null
   }
@@ -199,7 +216,16 @@ export default class extends Controller {
 
   get selectedRow() {
     const id = this.selectedId
+    if (!id) return null
+
     return this.rowTargets.find((row) => row.dataset.rowId === id) || null
+  }
+
+  // The surviving row is already marked by the time a frame finishes rendering
+  // — rowTargetConnected runs first — so forgetting the id is not enough.
+  clearSelection() {
+    this.rowTargets.forEach((row) => delete row.dataset.selected)
+    this.selectedId = ""
   }
 
   // The legend ------------------------------------------------------------

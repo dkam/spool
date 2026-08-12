@@ -121,11 +121,14 @@ class Ingest::InboundTest < ActiveSupport::TestCase
     ticket = ingest(:new_ticket).ticket
     ticket.update!(state: "closed", last_activity_at: 1.week.ago)
 
-    ingest(:reply_references_only)
+    result = ingest(:reply_references_only)
 
     ticket.reload
     assert_equal "open", ticket.state
-    assert_operator ticket.last_activity_at, :>, 1.day.ago
+    # Against the message that arrived, not against the wall clock. The .eml
+    # fixtures carry fixed Date: headers, so any window measured from `now`
+    # passes until the day the fixtures fall out of it and then fails forever.
+    assert_equal result.message.sent_at, ticket.last_activity_at
   end
 
   # --- rejection -----------------------------------------------------------
