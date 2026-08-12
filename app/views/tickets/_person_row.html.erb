@@ -29,8 +29,10 @@
       class: "relative grid grid-cols-[1fr_132px] gap-6 py-[15px] pr-3 border-b border-rule hover:bg-hover hover:no-underline" do %>
 
   <%# A hollow ring, not a dot: this row is a person rather than a ticket, and
-      the rail's filled/hollow vocabulary is about read state. %>
-  <span class="absolute -left-[30px] top-5 w-[9px] h-[9px] rounded-full bg-canvas border border-faint"></span>
+      the rail's filled/hollow vocabulary is about read state. `rail-dot` is not
+      decoration — it is the hook `a[data-selected] .rail-dot` lights up, so a
+      row without it can be selected and show nothing for it. %>
+  <span class="rail-dot absolute -left-[30px] top-5 w-[9px] h-[9px] rounded-full bg-canvas border border-faint"></span>
 
   <div class="min-w-0 flex items-baseline gap-2">
     <span class="font-medium tracking-[-0.01em]"><%= customer.display_name %></span>

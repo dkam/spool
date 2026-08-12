@@ -5,6 +5,9 @@ require "application_system_test_case"
 # note/reply toggle. An integration test can prove the markup is on the page;
 # only this can prove the controls do anything.
 class SpoolUiTest < ApplicationSystemTestCase
+  # --color-accent, as getComputedStyle reports it.
+  ACCENT = "rgb(240, 89, 42)"
+
   setup do
     @agent = Agent.find_or_create_by!(oidc_sub: "dev-open-mode") do |a|
       a.email = ENV.fetch("SPOOL_DEV_AGENT_EMAIL", "dev@localhost")
@@ -363,6 +366,35 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_no_selector "[data-selected]"
   end
 
+  # Every other keyboard test here asserts `[data-selected]` — the attribute,
+  # not the paint. That is why a person row could be selected, and correct in
+  # the DOM, while nothing on screen moved: its dot was missing the `rail-dot`
+  # class the selection styles hang off. This one reads the pixel.
+  test "the selected row lights its dot, whichever kind of row it is" do
+    mentioned = Ticket.create!(customer: @customer, subject: "Signed off",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: mentioned, direction: "inbound", message_id: "<in-4@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Dana asked us to check.", "html" => nil}),
+      body_excerpt: "Dana asked us to check.")
+
+    person = "a[data-row-id='customer-#{@customer.id}']"
+    ticket = "a[data-row-id='ticket-#{mentioned.id}']"
+
+    visit tickets_path(q: "dana")
+    assert_text(/people/i)
+    assert_not_equal ACCENT, dot_colour(person)
+
+    press :shift, "j"
+    assert_selector "#{person}[data-selected]"
+    assert_equal ACCENT, dot_colour(person)
+
+    press :shift, "j"
+    assert_equal ACCENT, dot_colour(ticket)
+    # And the one you left goes back to being an ordinary dot.
+    assert_not_equal ACCENT, dot_colour(person)
+  end
+
   # The cold visit above is the easy half. Nobody arrives at a search cold —
   # they were already walking the list, so the cursor is already somewhere, and
   # the question is what it means once the list underneath it has changed.
@@ -483,6 +515,17 @@ class SpoolUiTest < ApplicationSystemTestCase
 
   def tap_shift
     page.driver.browser.action.key_down(:shift).key_up(:shift).perform
+  end
+
+  # What the rail dot of a given row is actually painted, so a test can tell
+  # "selected" from "looks selected".
+  def dot_colour(row_selector)
+    evaluate_script(<<~JS)
+      (() => {
+        const dot = document.querySelector("#{row_selector} .rail-dot")
+        return dot ? getComputedStyle(dot).backgroundColor : null
+      })()
+    JS
   end
 
   def fill_in_notes(text)
