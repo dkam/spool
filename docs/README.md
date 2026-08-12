@@ -44,7 +44,13 @@ bin/rails test      # the suite
 bin/rails test:system
 bin/standardrb      # style; --fix to autocorrect
 bin/ci              # everything CI runs
+bin/build           # the production image, locally, with GIT_SHA baked in
 ```
+
+The README's screenshots are generated from the seeds rather than curated:
+`SCREENSHOTS=1 bin/rails test test/system/screenshots_test.rb` rewrites
+`docs/images/`. That test skips without the variable, so CI never takes a
+picture and the images only change when someone means them to.
 
 Style is [Standard](https://github.com/standardrb/standard), matching splat.
 There is no house style to learn and no `.rubocop.yml` to argue with — run
