@@ -24,7 +24,7 @@
 # Lives in config/ rather than lib/ so it can be read without booting Rails:
 #   ruby -e "require './config/version'; puts Spool::VERSION"
 module Spool
-  VERSION = "0.2.1"
+  VERSION = "0.3.0"
 
   # Where the footer sends you, and where a revision resolves to a commit.
   #
