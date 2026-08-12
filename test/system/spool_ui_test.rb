@@ -257,6 +257,10 @@ class SpoolUiTest < ApplicationSystemTestCase
 
     visit root_path
     fill_in "q", with: "smtp_tls"
+    # Wait on the URL, not on the text: both tickets match, so the text is
+    # already there before the search runs, and a test that doesn't wait for the
+    # response has it land later — on top of a cursor the test has since moved.
+    assert_current_path(/q=smtp_tls/)
     assert_text "Invoice for July"
 
     # Still typing: a bare j belongs in the box, not on the page.
@@ -315,6 +319,50 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_current_path customer_path(@customer)
   end
 
+  # The route everyone actually takes, and the one that was broken: you have
+  # just typed, so the caret is in the box, and the answer is on screen right
+  # underneath it. ⇧J is no help here — that is how you type a capital J, so the
+  # chord that drives every other list on the site puts a letter in the query
+  # and empties the results you were reaching for.
+  test "arrows reach the results without leaving the search box" do
+    mentioned = Ticket.create!(customer: @customer, subject: "Signed off",
+      state: "open", last_activity_at: 1.hour.ago)
+    Message.create!(ticket: mentioned, direction: "inbound", message_id: "<in-5@fieldworks.co>",
+      from_email: "dana@fieldworks.co", sent_at: 1.hour.ago,
+      body: JSON.generate({"text" => "Dana asked us to check.", "html" => nil}),
+      body_excerpt: "Dana asked us to check.")
+
+    visit root_path
+    press "/"
+    find_field("q").send_keys("dana")
+    assert_text(/people/i)
+
+    find_field("q").send_keys(:arrow_down)
+    assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
+    # And without putting the box down: another letter still goes in the query.
+    assert_equal "q", evaluate_script("document.activeElement.id")
+
+    find_field("q").send_keys(:arrow_down)
+    assert_selector "a[data-selected][data-row-id='ticket-#{mentioned.id}']"
+
+    find_field("q").send_keys(:arrow_up)
+    assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
+
+    find_field("q").send_keys(:enter)
+    assert_current_path customer_path(@customer)
+  end
+
+  # The reason the letters can't be shortcuts in there. J, K, L and H begin
+  # Jane, Kevin, Lisa and Harry, which is exactly what a people search is for.
+  test "a capital letter in the search box is a letter" do
+    visit root_path
+    press "/"
+    find_field("q").send_keys([:shift, "j"], "ane")
+
+    assert_equal "Jane", find_field("q").value
+    assert_no_selector "[data-selected]"
+  end
+
   # The cold visit above is the easy half. Nobody arrives at a search cold —
   # they were already walking the list, so the cursor is already somewhere, and
   # the question is what it means once the list underneath it has changed.
@@ -368,6 +416,22 @@ class SpoolUiTest < ApplicationSystemTestCase
     double_tap_shift gap: 0.5
 
     assert_selector "[data-shortcuts-target='hint'][data-latched]"
+  end
+
+  # A tap is a Shift on its own. ⇧J is a shortcut, and its release used to arm
+  # the second half of a double tap — so the next lone Shift completed one,
+  # latching the mode, and the one after that unlatched it. Using the keyboard
+  # was the thing that made the keyboard behave unpredictably.
+  test "using a shift shortcut does not prime the latch" do
+    visit root_path
+    press :shift, "j"
+    assert_selector "[data-selected]"
+
+    tap_shift
+    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
+    # Nothing latched, so a bare j is still inert.
+    press "j"
+    assert_selector "a[data-selected][data-row-id='ticket-#{@ticket.id}']"
   end
 
   test "typing a capital does not latch shortcut mode" do

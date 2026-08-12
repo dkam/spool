@@ -14,10 +14,11 @@ import { Turbo } from "@hotwired/turbo-rails"
 //   Tap Shift twice to latch it. The keys then work unshifted until you press
 //   Escape or click into a field, and the legend stays up saying so.
 //
-// The latch is what makes search navigable. After typing, the caret is in the
-// search box and every shortcut is correctly suppressed — so without it there
-// is no keyboard route from the box into the results you just asked for. Two
-// taps blurs the box and hands the keys back.
+// The latch is how you get J/K back after typing: the caret is in the search
+// box, every shortcut is correctly suppressed, and two taps blurs the box and
+// hands the keys over. It is not, however, how you reach your search results —
+// that is the arrows, from inside the box, needing nothing to be put down
+// first. See fieldKeys.
 //
 // Mounted on <body>, so one controller serves every screen and each screen
 // declares what it offers by which targets it renders: a list renders `row`
@@ -55,6 +56,24 @@ export default class extends Controller {
     k: "previous", arrowup: "previous",
     l: "open", arrowright: "open",
     h: "back", arrowleft: "back"
+  }
+
+  // What the keys do while the caret is still in the search box.
+  //
+  // Arrows and Enter only. The letters have to stay letters in there: J, K, L
+  // and H begin Jane, Kevin, Lisa and Harry, which is exactly what someone
+  // searching for a person types. Shift doesn't rescue them either — Shift+J
+  // *is* how you type a capital J, so the chord that drives every other list on
+  // the site puts a letter in the box and empties the results you were reaching
+  // for.
+  //
+  // Arrows cost nothing, because ↑/↓ in a single-line input only jump the caret
+  // to an end it is usually already at, and they are what every search box in
+  // the world already does.
+  static fieldKeys = {
+    arrowdown: "next",
+    arrowup: "previous",
+    enter: "open"
   }
 
   connect() {
@@ -233,9 +252,14 @@ export default class extends Controller {
   handleKeyDown(event) {
     if (event.key === "Shift") return this.handleShiftDown(event)
 
-    // Any other key ends a candidate double-tap. Without this, typing "HELLO"
-    // — shift, letter, shift, letter — would latch the mode mid-word.
+    // Any other key ends a candidate double-tap, and also means the Shift being
+    // held right now was used as a chord rather than tapped. Both matter:
+    // without the first, typing "HELLO" would latch the mode mid-word; without
+    // the second, ⇧J — a shortcut, not a tap — armed the half of a double tap
+    // that the next lone Shift completed, so the mode flipped on and straight
+    // back off and the keys looked dead.
     this.tapArmed = false
+    this.shiftClean = false
 
     if (event.metaKey || event.ctrlKey || event.altKey) return
 
@@ -243,6 +267,23 @@ export default class extends Controller {
     // too, which is the one place the typing guard below would swallow it.
     if (event.key === "Escape" && this.latched) {
       this.unlatch()
+      return
+    }
+
+    // The search box is the one field the list keys have to survive. You have
+    // just asked a question and the answer is on screen under the caret;
+    // reaching it shouldn't require first knowing how to put the box down.
+    //
+    // The double tap does that, and is still there, but it is a second gesture
+    // you have to be told about — and until you are, the obvious one types into
+    // the query and empties the very results you were aiming at.
+    if (this.hasSearchTarget && event.target === this.searchTarget) {
+      const action = this.constructor.fieldKeys[event.key.toLowerCase()]
+      // Enter with nothing picked is the form's own — let it submit.
+      if (!action || (action === "open" && !this.selectedRow)) return
+
+      event.preventDefault()
+      this[action]()
       return
     }
 
@@ -281,8 +322,9 @@ export default class extends Controller {
     if (event.key !== "Shift") return
 
     // Arms the second half of a double tap: a press only counts as the second
-    // one if the first was actually released.
-    this.tapArmed = true
+    // one if the first was released, and only if nothing else was pressed while
+    // it was down — a tap is a Shift on its own, not the Shift of a chord.
+    this.tapArmed = this.shiftClean
 
     if (!this.latched) this.hideHint()
   }
@@ -292,6 +334,9 @@ export default class extends Controller {
   handleShiftDown(event) {
     // Auto-repeat while the key is held is not a second tap.
     if (event.repeat) return
+
+    // A fresh press with nothing pressed alongside it — yet.
+    this.shiftClean = true
 
     const now = Date.now()
     // tapArmed means a release happened since the last press, so a hold can't

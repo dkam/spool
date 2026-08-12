@@ -172,6 +172,8 @@ Modelled on Basecamp: **hold Shift and the shortcuts are live.**
 | `⇧L` / `⇧→` | Open the selected ticket | any list |
 | `⇧H` / `⇧←` | Back to the list | ticket |
 | `/` or `?` | Focus search | everywhere |
+| `↓` / `↑` | Next / previous result | caret in the search box |
+| `↵` | Open the selected result | caret in the search box |
 | `⇧⇧` | Latch shortcut mode | everywhere |
 | `Esc` | Unlatch, or clear the search box | everywhere |
 
@@ -194,24 +196,55 @@ into a field. The legend stays up, takes the accent rule, and grows an `Esc
 Exit` item — while latched it isn't a hint any more, it's the only thing on
 screen explaining why bare keys are moving the page.
 
-It exists for search. After typing a query the caret is in the box and every
-shortcut is correctly suppressed, so **without it there is no keyboard route
-from the search box into the results you just asked for**. Two taps blurs the
-box and hands the keys back. Any other route — special-casing `⇧J` inside the
-search field, or Down-arrow-into-results — would have been a rule that applies
-to one field on one screen.
+It was built for search: after typing a query the caret is in the box and every
+shortcut is correctly suppressed, so two taps blurs the box and hands the keys
+back. It is still the way to get `J`/`K` after a search, and it earns its keep
+anywhere you've clicked into a field and want the list back.
+
+But **it is not the answer to reaching your search results**, and shipping it as
+the answer was wrong. This doc used to reject arrows-in-the-box as "a rule that
+applies to one field on one screen". What that argument missed is that the box
+is the one place the general rule *cannot* work: `⇧J` in a text field is how you
+type a capital J. So the chord that drives every other list on the site put a
+letter in the query, emptied the results, and left nothing to navigate — while
+the only working gesture was a second one nobody had been told about. See
+"Reaching the results" below.
 
 Three details that are load-bearing:
 
-- **A tap is timed from the release**, and any other key in between disarms it.
-  Otherwise typing `HELLO` — shift, letter, shift, letter — would latch the mode
-  mid-word. There's a test that types exactly that.
+- **A tap is a Shift on its own**: released with nothing pressed alongside it,
+  and the second press within 750ms of the first. Any other key in between
+  disarms it, so typing `HELLO` can't latch mid-word — and so can `⇧J`, which is
+  a shortcut rather than a tap. Before that second clause, using the keyboard
+  was what made the keyboard unpredictable: `⇧J` armed half a double tap, the
+  next lone Shift completed it, and the one after that undid it.
 - **Focusing any field unlatches.** Escape alone would mean the mode could be
   the reason a keystroke went missing from a reply.
 - **The latch survives navigation** (`sessionStorage`, per tab). It's a mode, so
   it stays until you leave it — latch, walk the list, open a ticket, come back,
   and it's still on. The legend is on screen throughout, which is what makes
   that honest rather than a trap.
+
+### Reaching the results
+
+**While the caret is in the search box, `↓`/`↑` walk the results and `↵` opens
+the highlighted one.** Bare, no modifier, nothing to put down first — `/`, type,
+`↓`, `↵` is the whole path from anywhere to a ticket or a person.
+
+The list is `fieldKeys` in the controller, kept deliberately separate from
+`keys`, and it is arrows and Enter only:
+
+- **The letters have to stay letters.** `J`, `K`, `L` and `H` begin Jane, Kevin,
+  Lisa and Harry, which is exactly what someone searching People types. Shift
+  doesn't rescue them — `⇧J` *is* the capital.
+- **The arrows cost nothing.** In a single-line input `↑`/`↓` only jump the caret
+  to an end it is usually already at, and walking a result list with them is
+  what every search box already does. No legend needed for a convention people
+  arrive with.
+- **Enter falls through when nothing is picked**, so the form still submits.
+
+The cursor still clears on `turbo:frame-render`, so typing another character
+drops the highlight — the results underneath it are different ones.
 
 **Shift is the entire guard against firing while someone types.** That is why it
 is worth keeping even though `j` alone would be more idiomatic: the protection is
