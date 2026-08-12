@@ -54,7 +54,7 @@ jobs:
 
       # Standard is RuboCop underneath, so it uses the same cache directory.
       - name: Prepare lint cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '**/.standard.yml', 'Gemfile.lock') }}
         with:
