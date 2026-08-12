@@ -59,11 +59,17 @@ Rails.application.configure do
   # adapter consults. See ApplicationRecord.writing, which now switches role on
   # ActiveRecord::Base and works identically in all three environments.
   #
-  # Keeping the selector on matters because test is the ONLY environment where
-  # an unwrapped write on a GET fails. In development and production the two
-  # roles are separate pools and the write quietly succeeds against the replica
-  # connection. Turning the selector off in test would mean this bug class —
-  # which has now bitten twice — has nowhere left to be caught.
+  # Keeping the selector on matters because an unwrapped write on a GET fails in
+  # every environment, and test is the only place that can catch it before a
+  # user does. This comment used to claim such a write "quietly succeeds against
+  # the replica connection" in development and production; that was wrong, and
+  # believing it is how the third instance of this bug shipped — the OIDC
+  # callback raising ReadOnlyError on a first login in production. The
+  # middleware sets prevent_writes on ActiveRecord::Base, and
+  # `current_preventing_writes` returns that flag for any descendant regardless
+  # of which pool the role resolves to. Separate pools do not soften it.
+  # Turning the selector off in test would mean this bug class — which has now
+  # bitten three times — has nowhere left to be caught.
   #
   # Both roles point at :primary here (see app/models/application_record.rb):
   # the suite runs inside an uncommitted transaction, so a genuinely separate

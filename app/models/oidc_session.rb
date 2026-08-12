@@ -18,13 +18,20 @@ class OidcSession < ApplicationRecord
     live.where(user_email: email)
   end
 
+  # Wraps itself in the writing role, for the same reason TicketRead.mark_read!
+  # does: the only caller is start_new_session_for, reached from the OIDC
+  # callback — a GET, routed to the read-only replica. The caller's rescue would
+  # have swallowed a ReadOnlyError here and logged a mapping failure, leaving
+  # backchannel logout quietly broken rather than failing the login.
   def self.create_for_user(oidc_sid:, session_id:, user_email:, expires_in: 24.hours)
-    create!(
-      oidc_sid: oidc_sid,
-      session_id: session_id,
-      user_email: user_email,
-      expires_at: expires_in.from_now
-    )
+    ApplicationRecord.writing do
+      create!(
+        oidc_sid: oidc_sid,
+        session_id: session_id,
+        user_email: user_email,
+        expires_at: expires_in.from_now
+      )
+    end
   rescue ActiveRecord::RecordNotUnique
     Rails.logger.warn "OIDC session already exists for sid: #{oidc_sid}"
     find_by(oidc_sid: oidc_sid)

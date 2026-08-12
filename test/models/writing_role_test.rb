@@ -4,11 +4,14 @@ require "test_helper"
 
 # Guards the reader/writer split itself.
 #
-# These tests exist because the same bug appeared twice: a legitimate write on a
-# GET, raising ReadOnlyError. Test is the only environment that can catch it —
-# in development and production the roles are separate pools and an unwrapped
-# write quietly succeeds against the replica connection. So the split stays
-# enabled in test (config/environments/test.rb) and these assert it behaves.
+# These tests exist because the same bug has appeared three times: a legitimate
+# write on a GET, raising ReadOnlyError. It raises in every environment — the
+# middleware sets prevent_writes on ActiveRecord::Base, which every model reads
+# through, so separate pools don't soften it — and test is the only place that
+# catches it before a user does. The third instance reached production: the OIDC
+# callback is a GET, and provisioning an agent on first login raised. So the
+# split stays enabled in test (config/environments/test.rb) and these assert it
+# behaves.
 class WritingRoleTest < ActiveSupport::TestCase
   setup do
     @agent = Agent.create!(oidc_sub: "sub-w", email: "w@example.com")
@@ -73,6 +76,47 @@ class WritingRoleTest < ActiveSupport::TestCase
 
     assert_equal "dev-open-mode", agent.oidc_sub
     assert agent.persisted?
+  end
+
+  # The instance that reached production. /auth/callback is a GET, so the first
+  # login by an agent nobody has provisioned yet is an INSERT on the read-only
+  # replica. It raised, the controller's catch-all rescue turned it into
+  # "Authentication error. Please try again.", and the redirect back to /login
+  # made it look like the provider had rejected the login.
+  test "provisioning an agent on a GET works, so a first OIDC login can succeed" do
+    agent = as_a_get_request do
+      Agent.find_or_provision!(oidc_sub: "sub-first-login", email: "new@example.com", name: "New Agent")
+    end
+
+    assert agent.persisted?
+    assert_equal "new@example.com", agent.reload.email
+  end
+
+  test "updating a changed email or name on a GET works" do
+    Agent.create!(oidc_sub: "sub-renamed", email: "old@example.com", name: "Old Name")
+
+    agent = as_a_get_request do
+      Agent.find_or_provision!(oidc_sub: "sub-renamed", email: "new@example.com", name: "New Name")
+    end
+
+    assert_equal "new@example.com", agent.reload.email
+    assert_equal "New Name", agent.name
+  end
+
+  # The quiet half of the same bug: this write is inside start_new_session_for's
+  # rescue, so a ReadOnlyError here never failed a login — it just logged a
+  # mapping failure and left backchannel logout with nothing to find.
+  test "the OIDC session mapping is created on a GET" do
+    session = as_a_get_request do
+      OidcSession.create_for_user(
+        oidc_sid: "sid-on-a-get",
+        session_id: "session-on-a-get",
+        user_email: @agent.email
+      )
+    end
+
+    assert session.persisted?
+    assert_equal session, OidcSession.find_live("sid-on-a-get")
   end
 
   test "the open-mode agent is not rewritten once it exists" do

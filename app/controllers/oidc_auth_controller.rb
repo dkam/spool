@@ -96,6 +96,11 @@ class OidcAuthController < ApplicationController
       return
     end
 
+    # Provisioning and the session mapping below are both writes on a GET, which
+    # the database selector routes to the read-only replica. Agent
+    # .find_or_provision! and OidcSession.create_for_user each ask for the
+    # writing role themselves, so there is deliberately no wrap here — see the
+    # notes on those methods.
     agent = Agent.find_or_provision!(
       oidc_sub: claims["sub"],
       email: email,

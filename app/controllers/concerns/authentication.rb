@@ -66,21 +66,21 @@ module Authentication
 
   DEV_AGENT_SUB = "dev-open-mode"
 
-  # Read first, and only write if the agent genuinely doesn't exist yet.
+  # Read first, and only provision if the agent genuinely doesn't exist yet.
+  # `current_agent` is called on every screen, so provisioning unconditionally
+  # meant an UPDATE on every single page view. The steady state now touches the
+  # database for a read only.
   #
-  # Two reasons. `current_agent` is called on every screen, so provisioning
-  # unconditionally meant an UPDATE on every single page view. And every screen
-  # is a GET, which the database selector routes to the reading role — so the
-  # first page load against a fresh database raised ReadOnlyError rather than
-  # rendering. The steady state now touches the database for a read only.
+  # Every screen is a GET, which the database selector routes to the reading
+  # role, so provisioning here is a write on a read-only connection. No wrap:
+  # Agent.find_or_provision! asks for the writing role itself.
   def development_agent
-    Agent.find_by(oidc_sub: DEV_AGENT_SUB) || ApplicationRecord.writing do
+    Agent.find_by(oidc_sub: DEV_AGENT_SUB) ||
       Agent.find_or_provision!(
         oidc_sub: DEV_AGENT_SUB,
         email: ENV.fetch("SPOOL_DEV_AGENT_EMAIL", "dev@localhost"),
         name: "Development Agent"
       )
-    end
   end
 
   def current_user_email = current_agent&.email
