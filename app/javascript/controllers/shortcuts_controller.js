@@ -25,7 +25,7 @@ import { Turbo } from "@hotwired/turbo-rails"
 // targets and gets J/K/L, a ticket renders a `back` target and gets H. A
 // screen with neither is inert, and nothing needs to know which screen it is.
 export default class extends Controller {
-  static targets = ["row", "back", "hint", "search", "latch"]
+  static targets = ["row", "back", "hint", "search", "tickets", "latch"]
 
   // All remembered per tab, not per browser: two tabs on two tickets should
   // not fight over one cursor.
@@ -55,7 +55,8 @@ export default class extends Controller {
     j: "next", arrowdown: "next",
     k: "previous", arrowup: "previous",
     l: "open", arrowright: "open",
-    h: "back", arrowleft: "back"
+    h: "back", arrowleft: "back",
+    t: "tickets"
   }
 
   // What the keys do while the caret is still in the search box.
@@ -190,6 +191,20 @@ export default class extends Controller {
     if (!this.hasBackTarget) return
 
     Turbo.visit(this.originUrlFor(this.backTarget) || this.backTarget.href)
+  }
+
+  // Home, and deliberately not H's smarter cousin: T goes to the inbox as it
+  // is, with no filter, no query and no memory of how you got anywhere. H
+  // retraces a step; T is the way out of whatever you have narrowed yourself
+  // into. On the list itself that makes it "clear everything", which is the
+  // same gesture answering the same question.
+  //
+  // The header's nav link is the target, so this key exists exactly where that
+  // link does — which is every screen — and nothing here has to know the route.
+  tickets() {
+    if (!this.hasTicketsTarget) return
+
+    Turbo.visit(this.ticketsTarget.href)
   }
 
   // The list this screen was actually opened from, or nothing.

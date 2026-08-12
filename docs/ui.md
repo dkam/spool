@@ -171,11 +171,19 @@ Modelled on Basecamp: **hold Shift and the shortcuts are live.**
 | `⇧K` / `⇧↑` | Previous ticket | any list |
 | `⇧L` / `⇧→` | Open the selected ticket | any list |
 | `⇧H` / `⇧←` | Back to the list | ticket |
+| `⇧T` | The ticket list, unnarrowed | everywhere |
 | `/` or `?` | Focus search | everywhere |
 | `↓` / `↑` | Next / previous result | caret in the search box |
 | `↵` | Open the selected result | caret in the search box |
 | `⇧⇧` | Latch shortcut mode | everywhere |
 | `Esc` | Unlatch, or clear the search box | everywhere |
+
+**`⇧T` and `⇧H` are not the same key twice.** H retraces a step — back to the
+list this ticket was opened from, filter and all. T ignores history and goes to
+the inbox as it is, which is why it is offered on the list itself: a search and
+two filters deep, it is the way out of what you have narrowed yourself into.
+Its target is the header's nav link, so the key exists exactly where that link
+does, and the controller never learns a route.
 
 Hold Shift for 400ms and a legend appears bottom-left saying what the current
 screen answers to. The keys work whether or not you wait for it — the legend is

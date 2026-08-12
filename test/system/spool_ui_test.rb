@@ -186,6 +186,30 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_current_path root_path
   end
 
+  # T is the way out, where H is the way back: it answers "take me to the
+  # inbox" without consulting where you have been.
+  test "t goes to the ticket list from a ticket and from a customer" do
+    visit ticket_path(@ticket)
+    press :shift, "t"
+    assert_selector "h1", text: "Tickets"
+
+    visit customer_path(@customer)
+    press :shift, "t"
+    assert_selector "h1", text: "Tickets"
+  end
+
+  test "t on a narrowed list gives back the whole list" do
+    visit tickets_path(state: "closed", q: "outbox")
+    assert_selector "[data-shortcuts-target='hint']", visible: :all, text: /Tickets/
+
+    press :shift, "t"
+
+    # Not tickets_path(state: "closed") — the filter is part of what you are
+    # asking to leave, which is the difference between this key and H.
+    assert_current_path root_path
+    assert_selector "a[data-ticket-id='#{@ticket.id}']"
+  end
+
   test "typing a capital in the composer is not a shortcut" do
     visit ticket_path(@ticket)
 

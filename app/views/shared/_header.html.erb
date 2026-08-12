@@ -12,8 +12,12 @@
     <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
   <% end %>
 
+  <%# Also the keyboard's way home: T visits this link's href, so the key is
+      available on exactly the screens this nav is — every one of them — and
+      the controller never learns a route. %>
   <nav class="flex gap-[22px] text-mid">
     <%= link_to "Tickets", root_path,
+          data: { shortcuts_target: "tickets" },
           class: "hover:no-underline #{chip_class(controller_name == "tickets")}" %>
   </nav>
 
