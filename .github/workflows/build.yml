@@ -151,51 +151,31 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    # Both steps talk to the API rather than to a working tree, so there is
+    # The step talks to the API rather than to a working tree, so there is
     # nothing here to check out.
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # Created through the API rather than with `git push origin $VERSION`,
-      # which fails here with:
+      # One call, and the tag is a side effect of the release rather than a
+      # step before it — which is the whole claim this job makes.
+      #
+      # It was `git tag -a` + `git push origin $VERSION`, and v0.2.0 published
+      # both images and then failed on the push:
       #
       #   refusing to allow a GitHub App to create or update workflow
       #   `.github/workflows/build.yml` without `workflows` permission
       #
       # GITHUB_TOKEN is a GitHub App token, and an App may not push a ref whose
-      # content includes workflow files. actions/checkout clones one commit
-      # deep, so pushing a tag from it offers that commit to the server as new
-      # content — including this file. There is no `workflows:` permission to
-      # grant in the block above; the alternative is a PAT with `workflow`
-      # scope, which is a stored credential to rotate.
+      # content includes workflow files — actions/checkout clones one commit
+      # deep, so the push offers that commit to the server as new content, this
+      # file included. There is no `workflows:` permission to grant in the block
+      # above, and the alternative is a PAT with `workflow` scope: a stored
+      # credential to rotate, in exchange for a git command doing what an API
+      # call does without one.
       #
-      # The API takes a SHA the server already has, so no content is offered
-      # and the restriction does not apply. Two calls because an annotated tag
-      # is an object plus a ref, and the annotation is worth keeping: it
-      # carries who tagged and when.
-      - name: Create the release tag
-        env:
-          VERSION: v${{ needs.prepare.outputs.version }}
-        run: |
-          # Idempotent: re-running the workflow on an unchanged version should
-          # be a no-op rather than a failure.
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
-            echo "$VERSION already tagged — nothing to do."
-            exit 0
-          fi
-
-          object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
-            -f tag="$VERSION" \
-            -f message="Spool $VERSION" \
-            -f object="$GITHUB_SHA" \
-            -f type=commit \
-            -q .sha)
-
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/$VERSION" \
-            -f sha="$object"
-
+      # --target names the commit the image was built from, so the tag lands
+      # there and not on whatever main has moved on to since.
       - name: Create the GitHub Release
         env:
           VERSION: v${{ needs.prepare.outputs.version }}
@@ -205,5 +185,6 @@ jobs:
             exit 0
           fi
           gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
             --title "Spool $VERSION" \
             --generate-notes
