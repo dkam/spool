@@ -97,6 +97,14 @@ app/views/
   login/index.html.erb           the signed-out screen
 ```
 
+**The header carries what you can act on.** The nav and the search box render
+only when `current_agent` is present, because the login screen renders the same
+layout: a Tickets link there returns you to the page you are on, and a search
+box answers nothing. The wordmark, the mailbox address and the theme switch stay
+— locked out, "which instance is this" is still a real question. The condition
+is `current_agent` rather than `authenticated?` on purpose: open mode has no
+session, so `authenticated?` is false on a wholly usable app.
+
 **The rail** — the vertical hairline with dots on it — is the one structural
 motif shared by all three screens. A container gets `relative pl-[30px]` with an
 absolutely positioned 1px line at `left-1`, and each child hangs a `-left-[30px]`

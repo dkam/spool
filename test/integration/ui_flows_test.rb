@@ -274,6 +274,41 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_equal "Prefers email over calls.", @customer.reload.notes
   end
 
+  # --- The signed-out header ------------------------------------------------
+
+  OIDC = {
+    "OIDC_CLIENT_ID" => "spool",
+    "OIDC_CLIENT_SECRET" => "secret",
+    "OIDC_DISCOVERY_URL" => "https://clinch.example.com"
+  }.freeze
+
+  # The login screen renders the layout, so every control in the header is on a
+  # page belonging to someone who cannot use any of them.
+  test "the login screen offers no controls a locked-out person cannot use" do
+    with_env(OIDC) do
+      get login_path
+
+      assert_response :success
+      assert_select "input[name=q]", false, "the search box answers nothing signed out"
+      assert_select "header nav a", false, "a Tickets link here returns you to this page"
+
+      # What is still worth showing: which instance this is, and the way in.
+      assert_match ENV.fetch("SPOOL_MAILBOX", "support@example.com"), response.body
+      assert_select "a[href=?]", "/login/start"
+    end
+  end
+
+  # Open mode has no session at all, so `authenticated?` is false on a wholly
+  # usable app. Gating the header on that instead of on current_agent would
+  # take the nav and the search away from every development instance.
+  test "open mode still gets the nav and the search" do
+    get root_path
+
+    assert_response :success
+    assert_select "input[name=q]"
+    assert_select "header nav a", text: "Tickets"
+  end
+
   # --- Attachments ----------------------------------------------------------
 
   test "an attachment downloads under the filename from the join row" do
