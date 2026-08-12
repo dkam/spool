@@ -1,0 +1,37 @@
+<%#
+  The bookend to the header, and the answer to "what exactly am I looking at?"
+  — asked most often of an instance somebody else deployed.
+
+  Two numbers, not one, and they answer different questions (docs/deploy.md):
+  the version is the release you can say out loud, the revision is the commit
+  that is actually running. A version alone cannot tell you whether the deploy
+  you just did took. The revision links to the commit, because a bare hex
+  string with no way to look it up is half a fact.
+
+  Outside a container with no VERSION file and outside development, the
+  revision is "unknown" — there is nothing to link to, so it is left out
+  entirely rather than shown as a word that looks like a value.
+%>
+<footer class="px-14 py-5 border-t border-rule">
+  <div class="flex items-center gap-4 text-xs text-faint">
+    <span>
+      Spool
+      <%= link_to "v#{Spool::VERSION}", "#{Spool::SOURCE_URL}/releases/tag/v#{Spool::VERSION}",
+            class: "font-mono hover:text-ink" %>
+    </span>
+
+    <% if (revision = Rails.application.config.x.revision) != "unknown" %>
+      <span class="w-px h-3 bg-rule"></span>
+      <%= link_to revision, "#{Spool::SOURCE_URL}/commit/#{revision}",
+            class: "font-mono hover:text-ink" %>
+    <% end %>
+
+    <span class="w-px h-3 bg-rule"></span>
+    <span>Rails <span class="font-mono"><%= Rails.version %></span></span>
+
+    <span class="w-px h-3 bg-rule"></span>
+    <span>Ruby <span class="font-mono"><%= RUBY_VERSION %></span></span>
+
+    <%= link_to "GitHub", Spool::SOURCE_URL, class: "ml-auto hover:text-ink" %>
+  </div>
+</footer>

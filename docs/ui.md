@@ -95,7 +95,29 @@ app/views/
     _composer.html.erb           reply/note box + template picker
   customers/show.html.erb        stat grid, ticket list, autosaving notes
   login/index.html.erb           the signed-out screen
+  shared/_footer.html.erb        version, revision, Rails, Ruby, GitHub
 ```
+
+**The footer answers "what exactly am I looking at?"** — asked most often of an
+instance somebody else deployed, which is why it is on every screen including
+the login page. It carries **two** numbers, because they answer different
+questions (see [deploy.md](deploy.md)): `Spool::VERSION` is the release you can
+say out loud, `config.x.revision` is the commit actually running, and a version
+alone cannot tell you whether the deploy you just did took. Both link to GitHub
+— a bare hex string with no way to look it up is half a fact — and an
+`unknown` revision is omitted rather than printed, because the word looks like
+a value.
+
+`Spool::SOURCE_URL` in `config/version.rb` is where the links come from. It is
+written a second time, literally, in the Dockerfile's
+`org.opencontainers.image.source` label, which cannot read Ruby; those are the
+only two copies.
+
+The footer also **makes room for the shortcut legend**, which is fixed to the
+same bottom-left corner. Only while the legend is up (`body:has(…)` in the
+stylesheet, since the legend renders after the footer and CSS cannot select
+backwards) — held, the overlap lasts as long as your thumb, but latched it lasts
+until Escape, and it covers the version numbers completely.
 
 **The header carries what you can act on.** The nav and the search box render
 only when `current_agent` is present, because the login screen renders the same

@@ -42,10 +42,15 @@
 
   <%# Shortcuts hang off <body> so they work before anything has been clicked,
       and so each screen only has to declare the targets it offers. %>
-  <body class="min-h-screen bg-canvas text-ink" data-controller="shortcuts">
+  <%# flex-col with a growing <main> so the footer sits at the bottom of the
+      window on a short screen — the login page is mostly empty, and a footer
+      floating halfway up it reads as the page having failed to load. %>
+  <body class="min-h-screen flex flex-col bg-canvas text-ink" data-controller="shortcuts">
     <%= render "shared/header" %>
 
-    <%= yield %>
+    <main class="flex-1"><%= yield %></main>
+
+    <%= render "shared/footer" %>
 
     <%# Shortcut mode: hold Shift for a moment and the screen says what it
         answers to. The keys work whether or not you wait for this. Screens

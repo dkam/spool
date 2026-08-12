@@ -309,6 +309,57 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_select "header nav a", text: "Tickets"
   end
 
+  # --- The footer -----------------------------------------------------------
+
+  test "the footer says which release and what it is running on" do
+    get root_path
+
+    assert_select "footer" do
+      assert_select "a[href=?]", Spool::SOURCE_URL, text: "GitHub"
+      assert_select "a[href=?]", "#{Spool::SOURCE_URL}/releases/tag/v#{Spool::VERSION}"
+    end
+    assert_match "Rails", response.body
+    assert_match Rails.version, response.body
+    assert_match RUBY_VERSION, response.body
+  end
+
+  test "a known revision links to the commit it came from" do
+    original = Rails.application.config.x.revision
+    Rails.application.config.x.revision = "abc1234"
+
+    get root_path
+
+    assert_select "footer a[href=?]", "#{Spool::SOURCE_URL}/commit/abc1234", text: "abc1234"
+  ensure
+    Rails.application.config.x.revision = original
+  end
+
+  # Outside a container and outside development there is no revision to report.
+  # A footer reading "unknown" looks like a value; the absence reads as what it
+  # is, which is that this build never recorded one.
+  test "an unknown revision is left out rather than printed" do
+    original = Rails.application.config.x.revision
+    Rails.application.config.x.revision = "unknown"
+
+    get root_path
+
+    assert_select "footer" do |footer|
+      assert_no_match(/unknown/, footer.first.to_s)
+    end
+  ensure
+    Rails.application.config.x.revision = original
+  end
+
+  # The one screen where "which instance is this, and is it current?" is most
+  # likely to be asked, and the one screen that renders none of the app.
+  test "the footer is on the login screen too" do
+    with_env(OIDC) do
+      get login_path
+
+      assert_select "footer a[href=?]", Spool::SOURCE_URL
+    end
+  end
+
   # --- Attachments ----------------------------------------------------------
 
   test "an attachment downloads under the filename from the join row" do

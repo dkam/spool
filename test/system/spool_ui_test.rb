@@ -474,6 +474,22 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_selector "[data-shortcuts-target='hint'][data-latched]"
   end
 
+  # The legend is fixed to the bottom-left corner and the footer keeps the
+  # version and the revision there. Held, that overlap lasts as long as your
+  # thumb; latched, it lasts until you press Escape — so the footer moves.
+  test "the footer makes room for the legend rather than sitting under it" do
+    visit root_path
+    before = footer_padding_bottom
+
+    double_tap_shift
+    assert_selector "[data-shortcuts-target='hint'][data-latched]"
+    assert_operator footer_padding_bottom, :>, before
+
+    press :escape
+    assert_no_selector "[data-shortcuts-target='hint']", visible: true
+    assert_equal before, footer_padding_bottom
+  end
+
   # A tap is a Shift on its own. ⇧J is a shortcut, and its release used to arm
   # the second half of a double tap — so the next lone Shift completed one,
   # latching the mode, and the one after that unlatched it. Using the keyboard
@@ -539,6 +555,10 @@ class SpoolUiTest < ApplicationSystemTestCase
 
   def tap_shift
     page.driver.browser.action.key_down(:shift).key_up(:shift).perform
+  end
+
+  def footer_padding_bottom
+    evaluate_script("parseFloat(getComputedStyle(document.querySelector('footer')).paddingBottom)")
   end
 
   # What the rail dot of a given row is actually painted, so a test can tell

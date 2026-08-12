@@ -155,3 +155,14 @@ input[type="search"]::-webkit-search-decoration {
   border-top-color: var(--color-accent);
   color: var(--color-soft);
 }
+
+/* The legend is fixed to the bottom-left corner, which is exactly where the
+   footer keeps the version and the revision — latched, it covers them
+   completely and stays there until you press Escape. So the footer makes room,
+   and only while the legend is actually up: nothing is reserved for an overlay
+   that is usually not there. 3.5rem is the legend's h-9 plus the footer's own
+   py-5. It has to be :has() because the legend is rendered after the footer and
+   CSS cannot otherwise select backwards. */
+body:has([data-shortcuts-target="hint"]:not([hidden])) footer {
+  padding-bottom: 3.5rem;
+}

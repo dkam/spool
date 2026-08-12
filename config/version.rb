@@ -25,4 +25,11 @@
 #   ruby -e "require './config/version'; puts Spool::VERSION"
 module Spool
   VERSION = "0.2.1"
+
+  # Where the footer sends you, and where a revision resolves to a commit.
+  #
+  # Also written literally in the Dockerfile's
+  # `org.opencontainers.image.source` label, which cannot read Ruby. Those two
+  # are the only copies; if the repository ever moves, they move together.
+  SOURCE_URL = "https://github.com/dkam/spool"
 end
