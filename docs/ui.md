@@ -332,6 +332,13 @@ be confused with, and it stays legible sitting on top of either. It is a quiet
 mark by design; if it proves too quiet in use, the next step is a row wash, not
 a louder dot.
 
+**`rail-dot` is a hook, not decoration.** Any row that can hold the cursor needs
+the class on its dot or it selects invisibly — correct in the DOM, unchanged on
+screen. The person row shipped without it and every keyboard test still passed,
+because they all assert `[data-selected]`, which is the attribute rather than
+the paint. `dot_colour` in the system test reads the computed background so at
+least one test can tell selected from looks-selected.
+
 ## Search
 
 **There is no search screen.** Search is another narrowing of the ticket list —
