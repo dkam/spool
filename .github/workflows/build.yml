@@ -151,28 +151,53 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Both steps talk to the API rather than to a working tree, so there is
+    # nothing here to check out.
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
+      # Created through the API rather than with `git push origin $VERSION`,
+      # which fails here with:
+      #
+      #   refusing to allow a GitHub App to create or update workflow
+      #   `.github/workflows/build.yml` without `workflows` permission
+      #
+      # GITHUB_TOKEN is a GitHub App token, and an App may not push a ref whose
+      # content includes workflow files. actions/checkout clones one commit
+      # deep, so pushing a tag from it offers that commit to the server as new
+      # content — including this file. There is no `workflows:` permission to
+      # grant in the block above; the alternative is a PAT with `workflow`
+      # scope, which is a stored credential to rotate.
+      #
+      # The API takes a SHA the server already has, so no content is offered
+      # and the restriction does not apply. Two calls because an annotated tag
+      # is an object plus a ref, and the annotation is worth keeping: it
+      # carries who tagged and when.
       - name: Create the release tag
         env:
           VERSION: v${{ needs.prepare.outputs.version }}
         run: |
           # Idempotent: re-running the workflow on an unchanged version should
           # be a no-op rather than a failure.
-          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
             echo "$VERSION already tagged — nothing to do."
             exit 0
           fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$VERSION" -m "Spool $VERSION"
-          git push origin "$VERSION"
+
+          object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
+            -f tag="$VERSION" \
+            -f message="Spool $VERSION" \
+            -f object="$GITHUB_SHA" \
+            -f type=commit \
+            -q .sha)
+
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$VERSION" \
+            -f sha="$object"
 
       - name: Create the GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: v${{ needs.prepare.outputs.version }}
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
