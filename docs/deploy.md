@@ -160,7 +160,31 @@ Four decisions in that file are load-bearing and none is the generated default:
   the Kamal network; an exposed 11300 is an unauthenticated queue on the
   internet.
 
-Deploying without Kamal is the same four containers by hand — see the README.
+## Without Kamal
+
+`compose.yml` is the same four containers plus Caddy for TLS, pulling the
+published image rather than building. `.env.example` documents every variable
+and is the only place the configuration is written down; `cp .env.example .env`
+is the whole setup step.
+
+Two things it encodes that a hand-rolled version usually gets wrong:
+
+- **Worker and scheduler wait on web's healthcheck**, because `db:prepare` runs
+  only for the web process. Started together, the other two would come up
+  against a database that does not exist yet.
+- **`SPOOL_HOST` drives both Caddy's certificate and the app's absolute URLs**,
+  from one variable, so they cannot disagree. When they do, the symptom is an
+  OIDC `redirect_uri` mismatch reported by the provider — which reads like a
+  problem with the provider rather than with the deployment.
+
+TLS is a requirement rather than a nicety, and the failure is not graceful.
+Booted from `compose.yml` and reached over plain HTTP, `GET /` answers `302 →
+https://…/login` and the session cookie comes back `secure` — `assume_ssl` makes
+Rails treat the request as encrypted, so every URL it generates is https and the
+first redirect leaves the plain-HTTP world for a port nothing is listening on.
+Same mechanism as the note above about turning the proxy off, arrived at from
+the other direction.
+
 Whatever runs them, the shape is fixed: one volume at `/rails/storage` shared by
 the three app containers, and only the web one may migrate.
 

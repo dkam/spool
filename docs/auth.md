@@ -25,9 +25,14 @@ everything.
 | `SPOOL_DEV_AGENT_EMAIL` | Identity used in open mode (default `dev@localhost`) |
 
 Redirect URI to register with the provider: `https://your-host/auth/callback`.
+The host must be the one in `SPOOL_HOST`, and the scheme must be https — a
+mismatch is rejected by the *provider*, so it reads as a problem with them
+rather than with the deployment. `compose.yml` derives the certificate hostname
+from `SPOOL_HOST` for that reason.
 
 Developed against [clinch](../../clinch), but nothing is provider-specific —
-any compliant provider works.
+any compliant provider works. `.env.example` carries discovery URLs for
+Authentik, Keycloak, Google, Okta and Entra ID as a starting point.
 
 ## Three configuration states
 

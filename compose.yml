@@ -1,0 +1,109 @@
+# Spool in production without Kamal — one image, three processes, one host.
+#
+#   cp .env.example .env    # then fill it in; it explains every value
+#   docker compose up -d
+#
+# The three app containers run the same image with a different command and
+# share one volume. `bin/docker-entrypoint` runs `db:prepare` only for the web
+# process, which is why worker and scheduler wait for web to be healthy: they
+# must never race it to migrate. See docs/deploy.md.
+#
+# TLS is not optional here, and the app does not degrade gracefully without it.
+# production.rb sets assume_ssl and force_ssl, so — verified against this stack
+# on plain HTTP — every absolute URL it emits is https (`GET /` answers `302 ->
+# https://…/login`) and the session cookie comes back marked `secure`. Reached
+# over http:// you are redirected somewhere nothing is listening, and if you
+# got past that the browser would drop the cookie anyway.
+#
+# Caddy below gets a certificate from Let's Encrypt automatically. If you
+# already run a reverse proxy, delete that service and give web a `ports:`
+# mapping instead — it must terminate TLS and pass the traffic on.
+name: spool
+
+# Everything the three app containers share. Each declares its own depends_on,
+# because a YAML merge would replace the key rather than add to it.
+x-spool: &spool
+  image: ghcr.io/dkam/spool:latest
+  env_file: .env
+  # The primary SQLite file is the entire application state — messages,
+  # attachment bytes, sessions. This volume is the whole backup surface.
+  volumes:
+    - spool_storage:/rails/storage
+  restart: unless-stopped
+
+services:
+  web:
+    <<: *spool
+    depends_on:
+      tuber:
+        condition: service_started
+    # Plain HTTP from inside the container: assume_ssl means Rails never
+    # redirects it, and /up is excluded from the redirect anyway.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/up"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      # Generous: the first boot of a fresh volume runs the migrations.
+      start_period: 60s
+
+  worker:
+    <<: *spool
+    command: bin/worker all
+    depends_on:
+      web:
+        condition: service_healthy
+
+  scheduler:
+    <<: *spool
+    command: bin/scheduler
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # The queue. Persistence is not optional in production: the inbound tube
+  # carries mail that has been accepted from the provider and not yet turned
+  # into a ticket, so an in-memory queue loses a customer's email on restart
+  # with nothing to replay from. TUBER_BINLOG_DIR is what turns the WAL on, and
+  # tuber refuses to start without a disk budget.
+  #
+  # No ports: are published on purpose. The app reaches it by service name on
+  # the compose network; an exposed 11300 is an unauthenticated queue on the
+  # internet.
+  tuber:
+    image: ghcr.io/tuberq/tuber:latest
+    command: server
+    environment:
+      TUBER_BINLOG_DIR: /var/lib/tuber
+      TUBER_MAX_STORAGE_BYTES: 2g
+    volumes:
+      - tuber_data:/var/lib/tuber
+    restart: unless-stopped
+
+  # TLS. SPOOL_HOST drives both the certificate and the app's own absolute
+  # URLs, so the two cannot drift apart — that pair being wrong is what makes
+  # an OIDC redirect_uri mismatch, and the provider reports it as your fault.
+  #
+  # Point the hostname's DNS at this machine and leave 80 and 443 free: Caddy
+  # needs both to get the certificate.
+  caddy:
+    image: caddy:2-alpine
+    command: caddy reverse-proxy --from ${SPOOL_HOST:?set SPOOL_HOST in .env} --to web:80
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Certificates live here. Losing it means re-issuing on every restart,
+      # which Let's Encrypt rate-limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  spool_storage:
+  tuber_data:
+  caddy_data:
+  caddy_config:

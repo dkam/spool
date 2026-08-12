@@ -52,10 +52,11 @@ theme is one attribute on `<html>` that the browser remembers.
 ![Search results in the dark theme, showing the People and Tickets sections](docs/images/search-dark.png)
 
 Keyboard, modelled on Basecamp: **hold Shift and the shortcuts are live** —
-`⇧J`/`⇧K` walk the list, `⇧L` opens, `⇧H` goes back, `/` focuses search. Hold
-Shift for a moment and a legend appears saying what the current screen answers
-to; tap it twice to latch the keys unshifted. See [docs/ui.md](docs/ui.md) for
-the design tokens, the screen anatomy and why the latch exists.
+`⇧J`/`⇧K` walk the list, `⇧L` opens, `⇧H` goes back, `⇧T` returns to the
+unnarrowed inbox from anywhere, `/` focuses search. Hold Shift for a moment and
+a legend appears saying what the current screen answers to; tap it twice to
+latch the keys unshifted. See [docs/ui.md](docs/ui.md) for the design tokens,
+the screen anatomy and why the latch exists.
 
 ## Status
 
@@ -127,7 +128,8 @@ screen.
 | `OIDC_PROVIDER_NAME`, `OIDC_ISSUER` | Optional: the name on the login button; an issuer override for providers whose discovery URL doesn't imply it |
 | `SPOOL_ALLOWED_USERS`, `SPOOL_ALLOWED_DOMAINS` | Who may sign in. Comma-separated; domains match subdomains |
 | `TUBER_URL` | The queue, default `localhost:11300` |
-| `RAILS_MASTER_KEY` | Rails credentials |
+| `SECRET_KEY_BASE` | Signs sessions and cookies. `openssl rand -hex 64`; changing it logs everyone out |
+| `RAILS_MASTER_KEY` | Only if you build your own image with your own credentials. Nothing in Spool reads `Rails.application.credentials`, so a deployment from the published image needs `SECRET_KEY_BASE` and not this |
 
 Two combinations are fatal at boot rather than warnings, because both fail in
 ways that are hard to diagnose from the outside: **OIDC configured with an empty
@@ -166,7 +168,42 @@ bin/kamal deploy     # after that
 bin/kamal logs -f -r worker
 ```
 
-### By hand
+### With Docker Compose
+
+`compose.yml` is the same four containers without Kamal, plus Caddy in front for
+TLS. It pulls the published image, so there is nothing to build.
+
+```bash
+cp .env.example .env     # every setting, with what it means
+docker compose up -d
+docker compose logs -f worker
+```
+
+`.env.example` is the one place the configuration is written down. The two
+values worth getting right before you start:
+
+```bash
+openssl rand -hex 64     # SECRET_KEY_BASE — sessions; changing it logs everyone out
+```
+
+and `SPOOL_HOST`, which is both the certificate hostname and the host in your
+OIDC redirect URI — register `https://<SPOOL_HOST>/auth/callback` with your
+provider. Compose feeds that one variable to both Caddy and the app so they
+cannot drift apart.
+
+**TLS is not optional**, and the app doesn't degrade gracefully without it:
+`assume_ssl` and `force_ssl` mean every absolute URL it emits is https and the
+session cookie is marked `secure`, so on plain `http://` the first redirect
+sends you somewhere nothing is listening. Caddy gets a certificate
+automatically; point the hostname's DNS at the machine and leave ports 80 and
+443 free. If you already run a reverse proxy, delete the `caddy` service, give
+`web` a `ports:` mapping, and terminate TLS there.
+
+Tuber's persistence is not optional either: the inbound tube carries mail that
+has been accepted from the provider and not yet turned into a ticket, and an
+in-memory queue loses it on restart with nothing to replay from.
+
+### Building it yourself
 
 ```bash
 bin/build            # builds ghcr.io/dkam/spool:vX.Y.Z locally, with GIT_SHA baked in
@@ -174,25 +211,9 @@ bin/build            # builds ghcr.io/dkam/spool:vX.Y.Z locally, with GIT_SHA ba
 
 `GIT_SHA` is what a running container reports as its revision, which is how you
 answer "is what I built actually running?" — `docker build .` on its own leaves
-it `unknown`. Then run tuber and the three processes against one volume, e.g.
-
-```bash
-docker network create spool
-docker run -d --name tuber --network spool \
-  -e TUBER_BINLOG_DIR=/var/lib/tuber -e TUBER_MAX_STORAGE_BYTES=2g \
-  -v tuber_data:/var/lib/tuber ghcr.io/tuberq/tuber:latest server
-
-docker run -d --name spool-web --network spool -p 80:80 \
-  --env-file spool.env -v spool_storage:/rails/storage ghcr.io/dkam/spool:latest
-docker run -d --name spool-worker --network spool \
-  --env-file spool.env -v spool_storage:/rails/storage ghcr.io/dkam/spool:latest bin/worker all
-docker run -d --name spool-scheduler --network spool \
-  --env-file spool.env -v spool_storage:/rails/storage ghcr.io/dkam/spool:latest bin/scheduler
-```
-
-with `TUBER_URL=tuber:11300` in `spool.env`. Tuber's persistence is not
-optional in production: the inbound tube carries mail that has been accepted and
-not yet turned into a ticket, and an in-memory queue loses it on restart.
+it `unknown`. Point `compose.yml`'s image at what you built, or run the four
+containers by hand: tuber, then web, worker and scheduler sharing one
+`spool_storage` volume, with `TUBER_URL=tuber:11300` in the environment.
 
 `storage/` is the entire backup surface. Only `production.sqlite3` matters —
 cache and cable are regenerable.
