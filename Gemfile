@@ -55,6 +55,11 @@ gem "jwt"
 # Pagination for the ticket list.
 gem "pagy", "~> 43.0"
 
+# Error tracking and light APM, over the Sentry protocol. Inert unless
+# SENTRY_DSN is set, so development and test send nothing. Developed against
+# ../splat, which speaks the same protocol — see config/initializers/sentry.rb.
+gem "sentry-rails"
+
 # Load environment variables from .env
 gem "dotenv-rails", groups: [:development, :test]
 

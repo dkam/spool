@@ -109,7 +109,9 @@ module Authentication
     Rails.logger.info "Created OIDC session mapping: sid=#{sid}, email=#{agent.email}"
   rescue => e
     # Losing the backchannel-logout mapping degrades logout; it must not cost
-    # the user their login.
+    # the user their login. Which is exactly why it gets reported: nothing
+    # visible goes wrong, so the only way anyone finds out is if it says so.
+    Sentry.capture_exception(e, tags: {phase: "oidc_session_mapping"})
     Rails.logger.error "Failed to create OIDC session mapping: #{e.message}"
   end
 
@@ -139,7 +141,11 @@ module Authentication
 
     true
   rescue => e
-    # A database hiccup while checking must not log everyone out.
+    # A database hiccup while checking must not log everyone out. Failing open
+    # is the right call and also the quiet one — it runs on every request, so
+    # without a report a broken check would keep every session alive
+    # indefinitely and look exactly like everything working.
+    Sentry.capture_exception(e, tags: {phase: "oidc_session_check"})
     Rails.logger.error "Error checking OIDC session validity: #{e.message}"
     true
   end

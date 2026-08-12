@@ -16,6 +16,11 @@ The revision is precise, automatic and meaningless to read. The version survives
 a rebuild of the same code, goes in a changelog, and is what you say out loud.
 Conflating them costs you one of the two.
 
+Error reporting is the one place they get joined rather than chosen between:
+`config/initializers/sentry.rb` sends `0.2.1+a1b2c3d` as the release. Two builds
+of the same version are genuinely different releases when you are asking whether
+a regression is yours, and SemVer already has a spelling for that.
+
 `config/version.rb` lives in `config/` rather than `lib/` so it can be read
 without booting Rails, which is how the build workflow gets at it:
 

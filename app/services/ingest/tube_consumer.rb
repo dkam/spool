@@ -206,9 +206,18 @@ module Ingest
       end
     end
 
+    # Every consumer failure comes through here — the loop's own rescues and
+    # each subclass's per-job one — which is the only reason a single
+    # capture_exception covers the workers.
+    #
+    # They need it explicitly. Sentry sees a web exception because it is in the
+    # Rack middleware stack; a worker thread has no middleware, and a consumer
+    # that swallows an exception to keep draining the tube would otherwise fail
+    # in complete silence. A no-op when SENTRY_DSN is unset.
     def log_exception(prefix, e)
       Rails.logger.error "#{prefix}: #{e.class}: #{e.message}"
       Rails.logger.error e.backtrace.first(10).join("\n")
+      Sentry.capture_exception(e, tags: {consumer: self.class.name})
     end
   end
 end

@@ -120,6 +120,15 @@ class OidcAuthController < ApplicationController
     Rails.logger.error "OIDC ID token verification failed: #{e.class}: #{e.message}"
     redirect_to login_path, alert: "Could not verify the identity token from your provider."
   rescue => e
+    # Reported, not just logged. This rescue is why a ReadOnlyError on first
+    # login read as "the provider rejected you" for as long as it took somebody
+    # to run `docker compose logs`: a handled exception never reaches Sentry's
+    # middleware, so anything swallowed here has to say so itself.
+    #
+    # The two rescues above are deliberately not reported. A bad or expired
+    # token is the world misbehaving rather than Spool, and they would page
+    # somebody every time a login sat too long on the provider's screen.
+    Sentry.capture_exception(e, tags: {phase: "oidc_callback"})
     Rails.logger.error "OIDC callback error: #{e.class}: #{e.message}"
     Rails.logger.error e.backtrace.first(10).join("\n") if Rails.env.development?
     redirect_to login_path, alert: "Authentication error. Please try again."
