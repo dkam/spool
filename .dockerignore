@@ -39,6 +39,12 @@
 # Ignore CI service files.
 /.github
 
+# Ignore the design record and its screenshots. Tailwind is already told not to
+# scan docs/ (@source not, in app/assets/tailwind/application.css), so nothing
+# in the build reads them and half a megabyte of PNG would otherwise ship in
+# every image.
+/docs
+
 # Ignore Kamal files.
 /config/deploy*.yml
 /.kamal

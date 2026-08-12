@@ -1,73 +1,100 @@
-# Name of your application. Used to uniquely configure containers.
+# Kamal deployment for Spool. See docs/deploy.md.
+#
+# One image, four containers on one host: web, worker, scheduler, and the tuber
+# accessory. The three app roles run the same image with a different command —
+# `bin/docker-entrypoint` runs `db:prepare` only for the web process, so the
+# worker and scheduler can never race it to migrate.
+#
+# Every `example.com` below is a placeholder. Nothing here is secret; the
+# secrets are named in `.kamal/secrets` and fetched from your password manager.
+
 service: spool
+image: dkam/spool
 
-# Name of the container image (use your-user/app-name on external registries).
-image: spool
-
-# Deploy to these servers.
+# Roles. `web` is the primary and the only one behind the proxy.
 servers:
   web:
     - 192.168.0.1
-  # job:
-  #   hosts:
-  #     - 192.168.0.1
-  #   cmd: bin/jobs
+  worker:
+    hosts:
+      - 192.168.0.1
+    cmd: bin/worker all
+    proxy: false
+  scheduler:
+    hosts:
+      - 192.168.0.1
+    cmd: bin/scheduler
+    proxy: false
 
-# Enable SSL auto certification via Let's Encrypt and allow for multiple apps on a single web server.
-# If used with Cloudflare, set encryption mode in SSL/TLS setting to "Full" to enable CF-to-app encryption.
-#
-# Using an SSL proxy like this requires turning on config.assume_ssl and config.force_ssl in production.rb!
-#
-# Don't use this when deploying to multiple web servers (then you have to terminate SSL at your load balancer).
-#
-# proxy:
-#   ssl: true
-#   host: app.example.com
+# kamal-proxy terminates TLS and gets the certificate from Let's Encrypt.
+# This is why `config.assume_ssl` and `config.force_ssl` are on in
+# config/environments/production.rb — turning the proxy off here means turning
+# those off too, or every request redirects to a scheme nothing is listening on.
+proxy:
+  ssl: true
+  host: spool.example.com
 
-# Where you keep your container images.
+# The same registry the release workflow publishes to (ghcr.io/dkam/spool), so
+# a Kamal deploy and a released image are the same repository, distinguished by
+# tag: Kamal pushes the git SHA, .github/workflows/build.yml pushes vX.Y.Z.
 registry:
-  # Alternatives: hub.docker.com / registry.digitalocean.com / ghcr.io / ...
-  server: localhost:5555
-
-  # Needed for authenticated registries.
-  # username: your-user
-
-  # Always use an access token rather than real password when possible.
-  # password:
-  #   - KAMAL_REGISTRY_PASSWORD
+  server: ghcr.io
+  username: dkam
+  password:
+    - KAMAL_REGISTRY_PASSWORD
 
 # Inject ENV variables into containers (secrets come from .kamal/secrets).
 env:
   secret:
     - RAILS_MASTER_KEY
+    - OIDC_CLIENT_SECRET
   clear:
-    # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
-    # When you start using multiple servers, you should split out job processing to a dedicated machine.
-    SOLID_QUEUE_IN_PUMA: true
+    # Host authority for absolute URLs — a hostname or "host:port", never a URI.
+    SPOOL_HOST: spool.example.com
 
-    # Set number of processes dedicated to Solid Queue (default: 1)
-    # JOB_CONCURRENCY: 3
+    # The support address. Shown in the header, and the From: on outbound mail.
+    SPOOL_MAILBOX: support@example.com
 
-    # Set number of cores available to the application on each server (default: 1).
-    # WEB_CONCURRENCY: 2
+    # Domain used in generated Message-IDs. Defaults to SPOOL_HOST's domain;
+    # set it when the two differ.
+    # SPOOL_MESSAGE_ID_DOMAIN: example.com
 
-    # Match this to any external database server to configure Active Record correctly
-    # Use spool-db for a db accessory server on same machine via local kamal docker network.
-    # DB_HOST: 192.168.0.2
+    # The tuber accessory, reachable by container name on the Kamal network.
+    TUBER_URL: spool-tuber:11300
+
+    # OIDC. All three of client id, client secret and discovery URL must be set
+    # or the app refuses to boot in production — see docs/auth.md. The secret is
+    # in the `secret:` list above.
+    OIDC_DISCOVERY_URL: https://id.example.com/.well-known/openid-configuration
+    OIDC_CLIENT_ID: spool
+    OIDC_PROVIDER_NAME: Example ID
+
+    # Who may sign in. At least one of these must be non-empty, or boot fails:
+    # an empty allowlist denies everyone after a successful round trip to the
+    # provider, which is the hardest failure to diagnose from the outside.
+    # Domains match subdomains, and accept a leading "*.".
+    SPOOL_ALLOWED_DOMAINS: example.com
+    # SPOOL_ALLOWED_USERS: alice@example.com,bob@example.com
+
+    # Puma. One process is right at this scale; threads are the SQLite writer
+    # pool size as well — see docs/architecture.md.
+    # WEB_CONCURRENCY: 1
+    # RAILS_MAX_THREADS: 5
 
     # Log everything from Rails
     # RAILS_LOG_LEVEL: debug
 
 # Aliases are triggered with "bin/kamal <alias>". You can overwrite arguments on invocation:
-# "bin/kamal logs -r job" will tail logs from the first server in the job section.
+# "bin/kamal logs -r worker" will tail logs from the first server in the worker section.
 aliases:
   console: app exec --interactive --reuse "bin/rails console"
   shell: app exec --interactive --reuse "bash"
   logs: app logs -f
-  dbc: app exec --interactive --reuse "bin/rails dbconsole --include-password"
+  dbc: app exec --interactive --reuse "bin/rails dbconsole"
 
-# Use a persistent storage volume for sqlite database files and local Active Storage files.
-# Recommended to change this to a mounted volume path that is backed up off server.
+# The primary SQLite file is the entire application state — messages,
+# attachment bytes, dictionaries, sessions. This volume is the whole backup
+# surface, and the only thing on the host worth keeping.
 volumes:
   - "spool_storage:/rails/storage"
 
@@ -77,43 +104,37 @@ volumes:
 asset_path: /rails/public/assets
 
 # Configure the image builder.
+#
+# GIT_SHA is what config/initializers/revision.rb reports at runtime, so
+# "is what I built actually running?" has an answer. Kamal builds from the
+# working tree, so this reads the working tree's HEAD.
 builder:
   arch: amd64
+  args:
+    GIT_SHA: <%= `git rev-parse HEAD`.strip %>
 
   # # Build image via remote server (useful for faster amd64 builds on arm64 computers)
   # remote: ssh://docker@docker-builder-server
-  #
-  # # Pass arguments and secrets to the Docker build process
-  # args:
-  #   RUBY_VERSION: 4.0.6
-  # secrets:
-  #   - GITHUB_TOKEN
-  #   - RAILS_MASTER_KEY
 
 # Use a different ssh user than root
 # ssh:
 #   user: app
 
-# Use accessory services (secrets come from .kamal/secrets).
-# accessories:
-#   db:
-#     image: mysql:8.0
-#     host: 192.168.0.2
-#     # Change to 3306 to expose port to the world instead of just local network.
-#     port: "127.0.0.1:3306:3306"
-#     env:
-#       clear:
-#         MYSQL_ROOT_HOST: '%'
-#       secret:
-#         - MYSQL_ROOT_PASSWORD
-#     files:
-#       - config/mysql/production.cnf:/etc/mysql/my.cnf
-#       - db/production.sql:/docker-entrypoint-initdb.d/setup.sql
-#     directories:
-#       - data:/var/lib/mysql
-#   redis:
-#     image: valkey/valkey:8
-#     host: 192.168.0.2
-#     port: 6379
-#     directories:
-#       - data:/data
+# Tuber, the job queue (docs/queue.md). No `port:` — the app reaches it over
+# the Kamal docker network, and nothing outside the host should.
+#
+# Persistence is not optional here: the inbound tube carries email that has
+# been accepted and not yet turned into a ticket, so an in-memory queue loses
+# customer mail on restart. TUBER_BINLOG_DIR turns the WAL on, and tuber
+# refuses to start with persistence enabled and no disk budget.
+accessories:
+  tuber:
+    image: ghcr.io/tuberq/tuber:latest
+    host: 192.168.0.1
+    cmd: server
+    env:
+      clear:
+        TUBER_BINLOG_DIR: /var/lib/tuber
+        TUBER_MAX_STORAGE_BYTES: 2g
+    directories:
+      - data:/var/lib/tuber

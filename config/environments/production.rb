@@ -21,14 +21,15 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
 
-  # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  # config.assume_ssl = true
+  # kamal-proxy terminates TLS in front of this app and forwards plain HTTP on
+  # the docker network, so without assume_ssl every request looks insecure to
+  # Rails and force_ssl redirects it forever. The two belong together; see the
+  # proxy stanza in config/deploy.yml.
+  config.assume_ssl = true
+  config.force_ssl = true
 
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  # config.force_ssl = true
-
-  # Skip http-to-https redirect for the default health check endpoint.
-  # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
+  # The proxy's health check speaks HTTP, so exempt it from the redirect.
+  config.ssl_options = {redirect: {exclude: ->(request) { request.path == "/up" }}}
 
   # Log to stdout with the current request id as a default log tag.
   config.log_tags = [:request_id]

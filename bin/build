@@ -1,0 +1,51 @@
+#!/bin/bash -e
+#
+# Build the production image locally, the way CI builds it.
+#
+# The point of this script is that `docker build .` on its own produces an
+# image that cannot say which commit it is: GIT_SHA defaults to "unknown" in
+# the Dockerfile, so config/initializers/revision.rb reports "unknown" and the
+# footer of a running container tells you nothing. Both CI workflows pass the
+# SHA; so does this, so does Kamal. See docs/deploy.md.
+#
+#   bin/build                       # tags :vX.Y.Z and :dev for the host arch
+#   PLATFORM=linux/amd64 bin/build  # cross-build for an amd64 server
+#   IMAGE=spool bin/build           # a bare local name instead of ghcr.io
+#
+# Publishing is deliberately not here. A release is a version bump on main —
+# .github/workflows/build.yml does the multi-arch build, the push and the tag.
+
+cd "$(dirname "$0")/.."
+
+IMAGE="${IMAGE:-ghcr.io/dkam/spool}"
+VERSION="$(ruby -e "require './config/version'; puts Spool::VERSION")"
+GIT_SHA="$(git rev-parse HEAD)"
+
+# A build from a dirty tree gets a SHA that does not describe what is in the
+# image. Worth saying out loud rather than silently mislabelling it.
+if ! git diff-index --quiet HEAD --; then
+  echo "warning: working tree is dirty — GIT_SHA=${GIT_SHA:0:12} won't describe this image" >&2
+fi
+
+args=(--build-arg "GIT_SHA=$GIT_SHA" --tag "$IMAGE:v$VERSION" --tag "$IMAGE:dev")
+[ -n "$PLATFORM" ] && args+=(--platform "$PLATFORM")
+
+echo "Building $IMAGE:v$VERSION (${GIT_SHA:0:12})"
+docker build "${args[@]}" .
+
+cat <<RUN
+
+Built $IMAGE:v$VERSION
+
+Run it:
+  docker run --rm -p 3000:80 \\
+    -e RAILS_MASTER_KEY="\$(cat config/master.key)" \\
+    -e SPOOL_HOST=localhost:3000 \\
+    -e OIDC_CLIENT_ID=… -e OIDC_CLIENT_SECRET=… -e OIDC_DISCOVERY_URL=… \\
+    -e SPOOL_ALLOWED_DOMAINS=example.com \\
+    -v spool_storage:/rails/storage \\
+    $IMAGE:v$VERSION
+
+An unauthenticated production boot is fatal by design (docs/auth.md), so the
+OIDC variables are not optional.
+RUN

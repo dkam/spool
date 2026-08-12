@@ -103,14 +103,13 @@ are cheap to add once the backing exists — see [ui.md](ui.md).
 - **IdP not finally chosen.** Developed against [clinch](../../clinch); works
   with any compliant provider. Google works if the team is on Workspace;
   otherwise Pocket ID (passkey-only, single binary) or Kanidm.
-- **Kamal deploy config** is the generated default and has not been reviewed.
-  `config/deploy.yml` needs the tuber accessory, the `storage/` volume, and the
-  OIDC/Mailgun secrets before a first deploy.
 - **Litestream** is not configured yet. One `dbs:` entry for
   `storage/production.sqlite3`; cache and cable are regenerable.
-- **`Dockerfile`** still reflects the generated skeleton — it needs `zstd`
-  (for milestone 6's training CLI) and must run `bin/worker` and `bin/scheduler`
-  alongside the web process.
+- **Nothing has been deployed yet.** `config/deploy.yml` now describes the real
+  thing — three roles, the storage volume, tuber with persistence on, the OIDC
+  environment — but every host and hostname in it is a placeholder and no first
+  deploy has been run against a server. The Mailgun secrets arrive with
+  milestone 5.
 
 ## Deviations from the build specification
 

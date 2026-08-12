@@ -113,6 +113,11 @@ scheduler  ./bin/scheduler
 `bin/docker-entrypoint` runs `db:prepare` **only** for the web process, so the
 worker and scheduler never race it to migrate.
 
+`bin/build` builds it locally the way both workflows do. The one thing it adds
+over `docker build .` is `--build-arg GIT_SHA`, without which the Dockerfile's
+default applies and `config.x.revision` reports `unknown` — an image that cannot
+say which commit it is defeats the entire point of having a revision.
+
 Two deliberate departures from the generated Dockerfile:
 
 - **No `libvips`.** There is no Active Storage and no `image_processing` gem;
@@ -120,6 +125,44 @@ Two deliberate departures from the generated Dockerfile:
 - **`zstd` added.** The CLI, not the library — `zstd-ruby` is statically linked.
   The binary is for dictionary training (milestone 6), which shells out to
   `zstd --train` because zstd-ruby exposes no training API.
+
+## Deploying it
+
+`config/deploy.yml` is the deployment: three roles running the same image with
+different commands, one `spool_storage` volume, and tuber as an accessory on the
+same host. Kamal builds from the working tree and pushes to the same repository
+the release workflow publishes to, distinguished by tag — Kamal pushes the git
+SHA, `build.yml` pushes `vX.Y.Z`.
+
+```bash
+bin/kamal setup            # first run: install docker, boot the proxy, deploy
+bin/kamal deploy
+bin/kamal logs -f -r worker
+bin/kamal console
+```
+
+Four decisions in that file are load-bearing and none is the generated default:
+
+- **`proxy: false` on worker and scheduler.** They serve nothing. Proxied, they
+  would be health-checked on a port nothing listens on and the deploy would fail
+  waiting for them.
+- **`assume_ssl` and `force_ssl` are on in `production.rb`** because
+  kamal-proxy terminates TLS and forwards plain HTTP over the docker network.
+  Turning the proxy's SSL off means turning both of those off in the same
+  commit, or every request redirects to a scheme nothing is listening on. `/up`
+  is excluded from the redirect so the proxy's own health check still works.
+- **Tuber runs with `TUBER_BINLOG_DIR` set**, which turns on its WAL, and with
+  a disk budget, without which it refuses to start. An in-memory queue is fine
+  for `spool.activejob` and wrong for `spool.inbound`: that tube carries mail
+  that has been accepted from the provider and not yet turned into a ticket, so
+  losing it on restart loses a customer's email with nothing to replay from.
+- **No `port:` on the accessory.** The app reaches tuber by container name on
+  the Kamal network; an exposed 11300 is an unauthenticated queue on the
+  internet.
+
+Deploying without Kamal is the same four containers by hand — see the README.
+Whatever runs them, the shape is fixed: one volume at `/rails/storage` shared by
+the three app containers, and only the web one may migrate.
 
 ## Consolidating the other repos
 
