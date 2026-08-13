@@ -7,14 +7,31 @@ in a single Rust binary. Expected on `localhost:11300`; override with
 Solid Queue is deliberately not used. Spool already runs tuber alongside splat,
 and keeping one queue technology across both is worth more than Solid Queue's
 zero-extra-process property. The Ruby client is the
-[tuber fork of beaneater](https://github.com/dkam/beaneater/tree/tuber), which
-adds `reserve_batch` and the `con:`/`idp:` put options.
+[`tuber` gem](https://github.com/tuberq/tuber-gem) — a rename of the beaneater
+fork this used to track, adding `reserve_batch` and the `con:`/`idp:` put
+options on top of beaneater 1.1.4.
+
+Don't resolve `tuber` to `0.0.1` — that version is a name reservation containing
+nothing but a `VERSION` constant, and the constraint is `~> 0.5` to keep the
+floor above it.
+
+### `Tuber` means two things
+
+`Ingest::Tuber` is Spool's wrapper; `::Tuber` is the gem. Inside `module Ingest`
+a bare `Tuber` resolves to the wrapper, so **every reference to the gem is
+written `::Tuber`**.
+
+Getting this wrong is not a loud failure. `rescue Tuber::NotFoundError` inside
+`Ingest` looks fine, loads fine, and passes every test that doesn't kill a
+connection — because Ruby resolves a rescue class only when something is
+actually raised. It fails with `NameError: uninitialized constant
+Ingest::Tuber::NotFoundError`, from the error path, in production.
 
 ## Tubes
 
 | Tube | Producer | Consumer |
 | --- | --- | --- |
-| `spool.inbound` | IMAP poller (milestone 3) | `Ingest::InboundConsumer` |
+| `spool.inbound` | `Jmap::Poller` | `Ingest::InboundConsumer` |
 | `spool.outbound` | compose action (milestone 5) | not built yet |
 | `spool.activejob` | `ActiveJob::QueueAdapters::TuberAdapter` | `Ingest::ActiveJobConsumer` |
 | `spool.maintenance` | `bin/scheduler` | `Ingest::DispatchConsumer` |
@@ -40,7 +57,7 @@ a ticket.
 The base class. Subclasses implement `#process_batch(jobs)`; everything else is
 handled here, and each piece is load-bearing:
 
-- **Connect and WATCH on the reserving thread.** Beaneater connections are
+- **Connect and WATCH on the reserving thread.** Client connections are
   per-thread. A watch issued on another thread wouldn't apply to the socket this
   thread reserves on, and the worker would silently reserve from `default`
   (always empty) and never drain its tube.
@@ -99,7 +116,7 @@ Per-entry options:
 
 - **`idp:`** — tuber idempotency key. While a job with that key is in the tube
   (ready or reserved), further puts with it are suppressed. Use on anything that
-  can run longer than its own interval; it's what stops a slow IMAP poll from
+  can run longer than its own interval; it's what stops a slow JMAP poll from
   stacking a second poller behind the first.
 - **`con:`** — tuber concurrency key. Caps simultaneous reserves across all
   consumers for jobs sharing the key.

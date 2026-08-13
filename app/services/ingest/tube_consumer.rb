@@ -44,7 +44,7 @@ module Ingest
 
     def run
       # connect! opens the connection and WATCHes on the same thread that
-      # reserves. Beaneater connections are per-thread: a watch issued on
+      # reserves. Client connections are per-thread: a watch issued on
       # another thread wouldn't apply to the socket this thread reserves on,
       # and the worker would silently reserve from `default` (always empty) and
       # never drain its tube.
@@ -95,7 +95,7 @@ module Ingest
     #
     # The heartbeat shares this consumer's connection deliberately: a
     # reservation belongs to the connection that made it, so a touch from any
-    # other socket is NOT_FOUND. Beaneater serialises commands on that
+    # other socket is NOT_FOUND. The client serialises commands on that
     # connection's mutex, and nothing reserves while a batch is in flight, so
     # the touch only ever contends with this batch's own deletes.
     def keeping_alive(jobs)
@@ -187,7 +187,7 @@ module Ingest
       when :ok then job.delete
       when :retry then bury_or_release(job)
       end
-    rescue Beaneater::NotFoundError
+    rescue ::Tuber::NotFoundError
       # Already gone server-side — nothing to do.
     end
 

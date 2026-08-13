@@ -28,17 +28,39 @@ Status as of the initial build. Milestones follow the build specification.
 
 ## Next
 
-### Milestone 3 — IMAP poller
-- [ ] `Imap::Poller` — `net-imap`, app password scoped to IMAP only
-- [ ] Poll the dedicated folder, fetch raw RFC822, put on `spool.inbound`
-- [ ] **Track UIDs and move processed messages to `Spool/Done` explicitly.
-      Never rely on the `\Seen` flag** — anyone opening the mailbox in a client
-      would silently consume the queue.
-- [ ] `Imap::PollJob` + uncomment the `imap_poll` entry in `config/schedule.yml`
-- [ ] Decide where the UID watermark lives (a `settings` row, most likely)
+### Milestone 3 — JMAP poller
+- [x] `Jmap::Client` — session, batched calls, blob download; no gem
+- [x] `Jmap::Poller` — read the folder, put raw RFC822 on `spool.inbound`
+- [x] ~~Move processed messages to `Spool/Done`~~ — **Spool never writes to the
+      mailbox.** The move was the only thing needing write access, and a JMAP
+      token is scoped to an account rather than a folder, so it would have meant
+      a credential able to rewrite every folder on the account. Also **nothing
+      reads or writes the `\Seen` flag**, so nothing done in a mail client can
+      consume the queue.
+- [x] `Jmap::PollJob` + the `jmap_poll` entry in `config/schedule.yml`
+- [x] Decide where the watermark lives — `ingest_cursors`, one row per folder:
+      a `receivedAt` plus the ids sharing that second, because JMAP's `after`
+      filter is inclusive and `receivedAt` is second-granular.
+- [ ] Point it at a real mailbox and watch it run
+
+Built against JMAP rather than IMAP: Fastmail wrote the protocol, `Email/query`
+scopes cleanly to one folder, and the whole poll is one HTTP request plus the
+blob downloads. It needs an **API token**, not an app password — see
+`.env.example`. Neither published Ruby JMAP gem is maintained, and none is
+needed: JMAP is JSON over HTTPS.
 
 The poller's only job is to hand raw bytes to `Ingest::Inbound.ingest`. Keep
 that boundary clean.
+
+The token must be **read-only**. The poller logs a warning every poll if given
+one that can write.
+
+Push is available and works — the session advertises `eventSourceUrl`, and
+`EmailDelivery` is the type to watch (`Email` advances on every flag change
+anywhere in the account). Deliberately not used yet: it carries state rather than
+payloads, a long-lived SSE connection can die silently, so a periodic sweep is
+the floor regardless — and with the cursor in place an idle poll is one API call
+returning nothing. Push would buy latency and nothing else.
 
 ### Milestone 4 — UI
 - [x] Ticket list (filters in a turbo-frame, read state via `with_read_state_for`)
@@ -166,6 +188,13 @@ Recorded because each one cost real time and none is obvious from the code.
   replaces the row with "Content missing". This shipped because every system
   test reached the thread with `visit ticket_path` — **if a screen is reachable
   by clicking, one test has to click it.**
+
+- **`Tuber` inside `module Ingest` is Spool's wrapper, not the gem.** Write
+  `::Tuber` for the gem, always. A bare `rescue Tuber::NotFoundError` resolves to
+  `Ingest::Tuber::NotFoundError`, and Ruby only evaluates a rescue class when
+  something raises — so it passes every test that never kills a connection and
+  raises `NameError` from the error path in production. See
+  [queue.md](queue.md).
 
 - **zstd stores incompressible input as a raw literal block.** A short body is
   legible inside its own frame. Compression is not obfuscation; don't assert on

@@ -12,17 +12,18 @@
 #
 # See docs/queue.md.
 
-# Poll the IMAP folder for new support mail. idp: because a slow round trip
-# must not stack a second poller behind the first — two pollers fetching the
-# same UIDs is how you get duplicate work (harmless, thanks to the unique index
-# on messages.message_id, but pointless).
+# Poll the Fastmail JMAP folder for new support mail. idp: because a slow round
+# trip must not stack a second poller behind the first — two pollers draining
+# the same folder is how you get duplicate work (harmless, thanks to the unique
+# index on messages.message_id, but pointless).
 #
-# Milestone 3. Commented until Imap::PollJob exists; see docs/todo.md.
-# imap_poll:
-#   class: Imap::PollJob
-#   tube: spool.maintenance
-#   schedule: every 60s
-#   idp: imap_poll
+# A no-op unless SPOOL_JMAP_TOKEN is set, so this stays enabled in a checkout
+# with no mail credentials.
+jmap_poll:
+  class: Jmap::PollJob
+  tube: spool.maintenance
+  schedule: every 60s
+  idp: jmap_poll
 
 # Sweep OIDC session mappings whose expiry has passed. Cheap: one indexed
 # delete over a table that holds at most a handful of rows.

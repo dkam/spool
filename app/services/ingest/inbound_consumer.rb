@@ -27,7 +27,7 @@ module Ingest
         Rails.logger.info "[InboundConsumer] #{result.outcome}#{" ticket=#{result.ticket.id}" if result.ticket}"
 
         job.delete
-      rescue Beaneater::NotFoundError
+      rescue ::Tuber::NotFoundError
         # Reservation already expired and someone else took it.
         nil
       rescue JSON::ParserError, KeyError => e

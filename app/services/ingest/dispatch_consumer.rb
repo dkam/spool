@@ -23,7 +23,7 @@ module Ingest
 
         klass_name.constantize.new.perform(*args)
         job.delete
-      rescue Beaneater::NotFoundError
+      rescue ::Tuber::NotFoundError
         nil
       rescue => e
         log_exception("[DispatchConsumer] #{klass_name || "?"} failed", e)

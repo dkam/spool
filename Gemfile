@@ -26,10 +26,16 @@ gem "tzinfo-data", platforms: %i[windows jruby]
 gem "solid_cache"
 gem "solid_cable"
 
-# Tuber/beanstalkd client. The tuber fork adds reserve_batch and the con:/idp:
-# put options on top of upstream beaneater 1.1.4, so we track the branch rather
-# than rubygems. Same dependency splat uses.
-gem "beaneater", git: "https://github.com/dkam/beaneater.git", branch: "tuber"
+# Tuber/beanstalkd client — a rename of the beaneater fork this used to track,
+# adding reserve_batch and the con:/idp: put options on top of beaneater 1.1.4.
+#
+# Tuber/beanstalkd client — a rename of the beaneater fork this used to track,
+# adding reserve_batch and the con:/idp: put options on top of beaneater 1.1.4.
+# Same dependency splat uses.
+#
+# Note `::Tuber` is the gem and `Ingest::Tuber` is Spool's wrapper. See
+# docs/queue.md before writing either.
+gem "tuber", "~> 0.5"
 
 # Drives the recurring scheduler (config/schedule.yml → tuber).
 gem "rufus-scheduler", "~> 3.9"

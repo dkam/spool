@@ -3,7 +3,7 @@
 `Ingest::Inbound.ingest(raw, source: nil)` takes raw RFC822 bytes and returns a
 `Result` with `outcome` of `:created`, `:duplicate` or `:rejected`.
 
-That signature is the whole design. Everything that delivers mail — the IMAP
+That signature is the whole design. Everything that delivers mail — the JMAP
 poller, a provider webhook, a test fixture, a console paste — calls this one
 method with bytes. Nothing upstream of it knows anything about tickets.
 
@@ -49,7 +49,7 @@ Every rejection is logged with its reason. Nothing is stored.
 
 ## Idempotency
 
-Both retry paths — an IMAP re-poll, a provider redelivery — can deliver the same
+Both retry paths — a JMAP re-poll, a provider redelivery — can deliver the same
 message twice. The unique index on `messages.message_id` is the guarantee;
 `Ingest::Inbound` does a cheap pre-check to avoid the parse-compress-write work,
 and rescues `ActiveRecord::RecordNotUnique` for the case where two workers race.
@@ -144,6 +144,103 @@ SELECT SUM(raw_size), SUM(LENGTH(headers_blob) + LENGTH(body_blob)) FROM message
 measures the real compression ratio on the real corpus. See
 [compression.md](compression.md).
 
+## Getting mail here (`Jmap::Poller`)
+
+Spool reads its mailbox over **JMAP**, not IMAP. Fastmail wrote the protocol,
+`Email/query` scopes cleanly to a single folder, and a whole poll is one HTTP
+request plus one download per message.
+
+Two layers, and the split is deliberate. `Jmap::Client` speaks only the protocol
+— session, batched method calls, blob download — and mentions nothing about
+Spool. `Jmap::Poller` holds all the policy. The client is the half that could
+become a gem one day; the poller never could.
+
+There is no JMAP gem in the dependency list because neither published one is
+maintained, and none is needed: JMAP is JSON over HTTPS.
+
+### Spool never writes to the mailbox
+
+The obvious design is a folder-as-queue: drain `SPOOL_JMAP_FOLDER` and move each
+processed message to a done folder, so what is in the folder *is* what is
+unprocessed. It needs no cursor and no bootstrap case, and it is self-healing —
+a poller that dies mid-batch simply finds the same mail still waiting.
+
+Spool doesn't do that, because the move is the only thing that would need write
+access, and **a JMAP token is scoped to an account, not to a folder**. A
+credential that can file mail out of the support folder can also rewrite every
+other folder on the account — on this mailbox, years of customer
+correspondence. A poller that *cannot* write is worth more than a folder that
+drains tidily.
+
+So the state lives in Spool instead, in `ingest_cursors`: one row per folder,
+holding the `receivedAt` of the newest message delivered plus the ids of every
+message sharing that exact second. `Email/query` filters on `after`, so the poll
+stays bounded as the folder grows.
+
+The id list alongside the timestamp is not belt-and-braces. JMAP's `after` is
+*inclusive* and `receivedAt` is second-granular, so a bare timestamp either
+re-fetches the boundary message on every poll — a wasted download a minute,
+forever — or skips a message that shared its second. The query limit is raised
+by the number of ids being dropped, or a batch could be filled entirely by
+messages already seen and the poll would make no progress at all.
+
+This also disposes of the `\Seen` hazard, and for a stronger reason than the
+folder design would have: nothing reads or writes flags, and nothing anyone does
+in a mail client can consume the queue, because Spool's idea of "processed"
+isn't in the account at all.
+
+**Queue first, advance second**, and only over a contiguous run of successes. If
+the third of five messages fails to download, the cursor stops at the second and
+the next poll re-reads from there; the fourth and fifth arrive twice and are
+deduped on `messages.message_id`. That is the right way to be wrong. Advancing
+to the newest success instead would step the cursor over a message that never
+arrived and lose it with no trace anywhere.
+
+A message that fails to download therefore holds the cursor and is retried, so a
+permanently broken one retries forever and loudly rather than vanishing. That is
+the right way round for a helpdesk, but it wants eyes on the log.
+
+**What this costs.** The folder accumulates instead of draining, so it is an
+archive rather than a worklist — "what's pending" is no longer visible in
+Fastmail. And because the high-water mark is a delivery timestamp, an old
+message hand-dragged into the folder lands behind it and is never picked up.
+Forward it to the support address instead.
+
+### Session URLs are read, never built
+
+Fastmail pins accounts to a region: ask `api.fastmail.com` and the session hands
+back `phl.api.fastmail.com` for the API, download and event-source URLs. Every
+URL comes from the session at runtime. Hardcoding a host works right up until an
+account moves, and the failure lands on the only path that delivers mail.
+
+### Push
+
+The session advertises `eventSourceUrl` and it works — verified against a live
+account. It is not used yet, and it would be an optimisation rather than a
+mechanism.
+
+Watch **`EmailDelivery`**, not `Email`. `Email` advances on any change to any
+message anywhere in the account — a flag set from a phone, a message filed by
+hand — which on a busy mailbox is a firehose of events that have nothing to do
+with Spool. `EmailDelivery` advances only when new mail is delivered, which is
+exactly the event a support folder cares about.
+
+Three things it does not do:
+
+- It carries **state, not payloads**. You still run the same query afterwards;
+  push changes only *when* the poller runs, not what it does.
+- It is **account-wide**, so it says "something arrived somewhere", not
+  "something arrived in `Spool`". It is a nudge to go and look.
+- It does not fire when a message is **filed** into the folder without being
+  delivered — dragging an old message in raises no `EmailDelivery`. That is the
+  same gap the timestamp cursor has, from the other end.
+
+The periodic sweep stays regardless. A long-lived SSE connection can die
+silently, and a helpdesk that has quietly stopped receiving mail is the worst
+failure this system has. Push would buy latency — seconds instead of up to a
+minute — and nothing else. With the cursor in place a poll that finds nothing is
+a single API call returning an empty list, so the sweep is close to free.
+
 ## Swapping the transport
 
 The consumer (`Ingest::InboundConsumer`) is four lines of real work: base64-decode
@@ -157,7 +254,7 @@ Nothing in this document changes. That was the point of the boundary.
 ## Testing
 
 `test/services/ingest/inbound_test.rb` drives every path from `.eml` fixtures in
-`test/fixtures/files/emails/`. No IMAP, no tuber, no HTTP.
+`test/fixtures/files/emails/`. No mailbox, no tuber, no HTTP.
 
 Covered: new ticket, all three threading strategies, the subject-tag customer
 mismatch, reopening a closed ticket, each rejection rule, self-sent echo,

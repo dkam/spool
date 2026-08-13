@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_11_000009) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
   create_table "agents", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -48,6 +48,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_11_000009) do
     t.datetime "updated_at", null: false
     t.integer "version", null: false
     t.index ["kind", "version"], name: "index_dictionaries_on_kind_and_version", unique: true
+  end
+
+  create_table "ingest_cursors", force: :cascade do |t|
+    t.text "position", null: false
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.index ["source"], name: "index_ingest_cursors_on_source", unique: true
   end
 
   create_table "message_attachments", force: :cascade do |t|

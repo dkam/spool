@@ -71,7 +71,7 @@ exist yet.
 | Queue — tuber, consumers, scheduler, Active Job adapter | done |
 | Auth — OIDC, allowlist, sessions | done |
 | UI — ticket list, thread, customer, search | done |
-| **IMAP poller** — nothing puts mail *in* yet | not built |
+| Inbound — JMAP poller (Fastmail), folder-as-queue | done |
 | **Outbound send** — nothing takes mail *out* yet | not built |
 | Dictionary training, templates CRUD, pagination | not built |
 

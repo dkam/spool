@@ -1,9 +1,16 @@
 # frozen_string_literal: true
 
 module Ingest
-  # Thin wrapper over the beaneater client for tuber (../tuber), covering
-  # connection lifecycle, the put helper, and the liveness/depth probes the UI
-  # uses. See docs/queue.md.
+  # Thin wrapper over the `tuber` gem (../tuber-gem), covering connection
+  # lifecycle, the put helper, and the liveness/depth probes. See docs/queue.md.
+  #
+  # This module and the gem share a name, and the gem's is at the top level, so
+  # **every reference to the gem here must be written `::Tuber`**. A bare
+  # `Tuber::NotFoundError` inside `module Ingest` resolves to
+  # `Ingest::Tuber::NotFoundError` and raises NameError — and because Ruby
+  # evaluates a `rescue` class only when something is actually raised, it would
+  # do so from the error path, in production, having passed every test that
+  # never made a connection die.
   module Tuber
     # Raw RFC822 handed over by the IMAP poller, one job per message.
     INBOUND_TUBE = "spool.inbound"
@@ -26,13 +33,13 @@ module Ingest
     DEFAULT_TTR = 120
     DEFAULT_PRI = 1024
 
-    # A dead socket — tuber was restarted or bounced under us. Beaneater retries
-    # these a few times inside a single command and then gives up with
+    # A dead socket — the tuber server was restarted or bounced under us. The
+    # client retries a few times inside a single command and then gives up with
     # NotConnected, at which point the cached connection holds a closed socket
     # that never heals on its own. Producers and consumers both key off this
     # list to rebuild the connection.
     CONNECTION_ERRORS = [
-      ::Beaneater::NotConnected, Errno::ECONNREFUSED, Errno::ECONNRESET,
+      ::Tuber::NotConnected, Errno::ECONNREFUSED, Errno::ECONNRESET,
       Errno::EPIPE, EOFError, IOError, SocketError
     ].freeze
 
@@ -41,11 +48,11 @@ module Ingest
         ENV.fetch("TUBER_URL", "localhost:11300")
       end
 
-      # One producer client per thread. Beaneater serialises commands through an
-      # internal mutex, but a per-thread connection avoids contending Puma
+      # One producer client per thread. The client serialises commands through
+      # an internal mutex, but a per-thread connection avoids contending Puma
       # threads on the same socket.
       def producer
-        Thread.current[:spool_tuber_producer] ||= ::Beaneater.new(address)
+        Thread.current[:spool_tuber_producer] ||= ::Tuber.new(address)
       end
 
       # Throw the per-thread connection away so the next #producer rebuilds it.
@@ -89,7 +96,7 @@ module Ingest
       # Consumers WATCH tubes; producers USE them. Keeping consumers on their
       # own connection avoids leaking watched-tube state into web threads.
       def consumer_client
-        ::Beaneater.new(address)
+        ::Tuber.new(address)
       end
 
       # Distinguishes "tuber is up with an empty queue" from "tuber is
@@ -99,7 +106,7 @@ module Ingest
       def reachable?
         with_producer { |conn| conn.tubes[INBOUND_TUBE].stats }
         true
-      rescue ::Beaneater::NotFoundError
+      rescue ::Tuber::NotFoundError
         true
       rescue
         false
@@ -110,7 +117,7 @@ module Ingest
         with_producer do |conn|
           ALL_TUBES.sum do |name|
             conn.tubes[name].stats.current_jobs_ready.to_i
-          rescue ::Beaneater::NotFoundError
+          rescue ::Tuber::NotFoundError
             0
           end
         end
@@ -127,7 +134,7 @@ module Ingest
             s = conn.tubes[name].stats
             [name, {ready: s.current_jobs_ready.to_i, reserved: s.current_jobs_reserved.to_i,
                     buried: s.current_jobs_buried.to_i, delayed: s.current_jobs_delayed.to_i}]
-          rescue ::Beaneater::NotFoundError
+          rescue ::Tuber::NotFoundError
             [name, {ready: 0, reserved: 0, buried: 0, delayed: 0}]
           end
         end

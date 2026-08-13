@@ -230,15 +230,21 @@ original.
 
 ---
 
-## Inbound — IMAP (v1)
+## Inbound — JMAP (v1)
 
-Fastmail, app password scoped to IMAP only. Server-side rule files support mail
+Fastmail, **read-only API token** scoped to `urn:ietf:params:jmap:core` and
+`urn:ietf:params:jmap:mail`. Not an app password — that is the IMAP/SMTP
+credential, and JMAP will not accept one. A server-side rule files support mail
 into a dedicated folder.
 
-A recurring Tuber job polls that folder with `net-imap` (stdlib), fetches raw
-RFC822, and enqueues each message for processing. Move processed messages to
-`Spool/Done` — **track UIDs and move explicitly; never rely on the `\Seen` flag**,
-because anyone opening the mailbox in a client will silently consume the queue.
+A recurring Tuber job polls that folder, downloads each message's blob as raw
+RFC822, and enqueues it for processing. Spool **never writes to the mailbox**: a
+JMAP token is scoped to an account rather than a folder, so anything able to
+file mail out of the support folder could also rewrite every other folder on the
+account. How far it has read is kept in `ingest_cursors` instead — and **never
+in the `\Seen` flag**, because anyone opening the mailbox in a client would
+silently consume the queue. See [ingest.md](ingest.md) for the cursor's shape
+and what the design costs.
 
 The poller's only job is to hand raw RFC822 to the ingest job. Keep that
 boundary clean: swapping to a Mailgun webhook later must be a config change, not
@@ -247,7 +253,7 @@ unchanged either way.)
 
 ### Ingest job — must be idempotent
 
-Both retry paths (IMAP re-poll, provider redelivery) can deliver the same
+Both retry paths (a re-read behind the cursor, provider redelivery) can deliver the same
 message twice. Rely on the unique index on `messages.message_id`, rescue the
 constraint violation, return.
 
@@ -338,7 +344,7 @@ Ticket states are `open`, `pending`, `closed`. Three is enough. Resist `on_hold`
    ActionMailbox conductor at `/rails/conductor/action_mailbox/inbound_emails`.
    Get threading, MIME splitting and loop rejection correct here — **no live
    mailbox in the loop while iterating.**
-3. IMAP poller.
+3. JMAP poller.
 4. UI and OIDC.
 5. Outbound via Mailgun.
 6. Dictionary training job, once real mail has accumulated.
