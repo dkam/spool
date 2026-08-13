@@ -133,6 +133,30 @@ For an HTML-only message, `Ingest::Inbound.html_to_text` produces something
 searchable. It is deliberately crude — its only job is to feed `body_excerpt`.
 The HTML itself is preserved and is what gets rendered.
 
+## `X-Spool-Meta-*` headers
+
+A sending application can stamp structured ticket details into the mail
+itself — Booko's issue form sends, among others:
+
+```
+X-Spool-Meta-User: hugh@example.org
+X-Spool-Meta-Product: 9780375703768
+X-Spool-Meta-Product-Url: https://booko.au/9780375703768/
+X-Spool-Meta-Region: au
+X-Spool-Meta-Ip: 203.0.113.7
+```
+
+`Message#spool_meta` parses these out of the stored header block **at read
+time**, not at ingest. The blob keeps every header anyway, so there is no
+schema, no allowlist to maintain, and mail that arrived before its sender
+learned the convention gains the panel retroactively. Keys are the header
+suffix, downcased (`product-url`); the ticket page renders the merge across
+the thread's inbound messages as a properties row, later messages winning.
+
+The values are attacker-controlled like everything else in the mail. They are
+rendered as text (URLs become links but keep their literal text), never
+trusted for anything.
+
 ## `raw_size`
 
 The uncompressed byte size of exactly what the two blobs hold, so that

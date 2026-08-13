@@ -217,6 +217,39 @@ class Ingest::InboundTest < ActiveSupport::TestCase
     # Entities decoded, tags gone.
     assert_includes message.body_excerpt, '"account locked"'
     refute_includes message.body_excerpt, "<p>"
+    # <head>, <title> and <style> contents are not prose and must not leak in.
+    refute_includes message.body_excerpt, "CLIENT-SPECIFIC STYLES"
+    refute_includes message.body_excerpt, "Example Corp Webmail"
+  end
+
+  test "Reply-To wins over From: a form mail belongs to the human, not the mailer" do
+    result = ingest(:form_reply_to)
+
+    assert result.created?
+    assert_equal "hugh@example.org", result.ticket.customer.email
+    assert_equal "hugh@example.org", result.message.from_email
+    # The From display name ("Example Shop") must not stick to the human.
+    assert_nil result.message.from_name
+    # The real From header is still recoverable.
+    assert_includes result.message.headers, "From: Example Shop <admin@mg.example-shop.com>"
+  end
+
+  test "X-Spool-Meta-* headers surface as structured metadata" do
+    message = ingest(:form_reply_to).message.reload
+
+    meta = message.spool_meta
+    assert_equal "9780375703768", meta["product"]
+    assert_equal "https://booko.au/9780375703768/", meta["product-url"]
+    assert_equal "au", meta["region"]
+    assert_equal "iOS 17.5", meta["platform"]
+    # A folded header value is unfolded, not truncated at the line break.
+    assert_includes meta["agent"], "AppleWebKit/605.1.15"
+    # Nothing else leaks in under meta keys.
+    assert_equal %w[ip agent platform access-type user product product-url region].sort, meta.keys.sort
+  end
+
+  test "a message without meta headers has empty spool_meta" do
+    assert_equal({}, ingest(:new_ticket).message.reload.spool_meta)
   end
 
   test "a non-UTF-8 charset is transcoded rather than raising" do

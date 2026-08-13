@@ -53,8 +53,26 @@ class Message < ApplicationRecord
   # it is attacker-controlled by definition.
   def body_for_display = body_html || body_text
 
+  # Structured ticket metadata stamped by the sending application as
+  # X-Spool-Meta-* headers — a Booko form reports the product, region and IP
+  # this way. Parsed from the stored header block on demand rather than at
+  # ingest: the blob keeps every header anyway, so this also works on mail
+  # that arrived before its sender learned the convention. Keys are the
+  # header suffix, downcased: {"product" => "97803…", "product-url" => "…"}.
+  def spool_meta
+    @spool_meta ||= headers.to_s
+      .gsub(/\r?\n[ \t]+/, " ") # unfold RFC 5322 continuation lines
+      .each_line(chomp: true)
+      .filter_map do |line|
+        name, value = line.split(":", 2)
+        suffix = name.to_s[/\Ax-spool-meta-(.+)\z/i, 1]
+        [suffix.downcase, Mail::Encodings.value_decode(value.strip)] if suffix && value.to_s.strip.present?
+      end.to_h
+  end
+
   def reload(*)
     @body_document = nil
+    @spool_meta = nil
     super
   end
 

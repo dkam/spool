@@ -7,7 +7,9 @@ Subject: Cannot log in to the portal
 MIME-Version: 1.0
 Content-Type: text/html; charset=UTF-8
 
-<html><body style="font-family: Arial">
+<html><head><title>Example Corp Webmail</title>
+<style type="text/css">/* CLIENT-SPECIFIC STYLES */ body{margin:0;} .ExternalClass{width:100%;}</style>
+</head><body style="font-family: Arial">
 <p>Hi there,</p>
 <p>I <b>cannot</b> log in to the portal &mdash; it says &quot;account locked&quot;.</p>
 <p>Regards,<br>Grace</p>

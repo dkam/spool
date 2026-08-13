@@ -132,7 +132,7 @@ module Ingest
       return nil if html.blank?
 
       html
-        .gsub(%r{<(script|style)[^>]*>.*?</\1>}mi, " ")
+        .gsub(%r{<(script|style|title|head)[^>]*>.*?</\1>}mi, " ")
         .gsub(%r{<br\s*/?>}i, "\n")
         .gsub(%r{</p>}i, "\n\n")
         .gsub(/<[^>]+>/, " ")
@@ -142,17 +142,28 @@ module Ingest
         .strip
     end
 
+    # Reply-To wins over From. A form mailer (a contact form, Booko's issue
+    # reports) has to send from its own authenticated domain, so the human who
+    # filled the form travels in Reply-To — and an agent's reply is going to
+    # that address regardless, so the ticket should belong to it too. The full
+    # From header survives in headers_blob if it's ever needed.
     def sender(mail)
-      address = mail.from&.first
+      field = [:reply_to, :from].find { |f| address_of(mail, f) } || :from
       name = begin
-        mail[:from]&.display_names&.first
+        mail[field]&.display_names&.first
       rescue
         nil
       end
 
-      {email: address.to_s.strip.downcase.presence, name: name.presence}
+      {email: address_of(mail, field), name: name.presence}
     rescue
       {email: nil, name: nil}
+    end
+
+    def address_of(mail, field)
+      mail.public_send(field)&.first.to_s.strip.downcase.presence
+    rescue
+      nil
     end
 
     # Strips the Re:/Fwd: prefixes and Spool's own [#123] tag, so a new ticket

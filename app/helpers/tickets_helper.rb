@@ -76,32 +76,49 @@ module TicketsHelper
   # An email body is either a text/plain rendering or an HTML one; both arrive
   # from outside and neither is trustworthy.
   #
+  # The text part wins when both exist. It is what the sender's mailer chose as
+  # the plain rendering of the same content, it quote-strips cleanly, and it
+  # never smuggles in a stylesheet. HTML is the fallback for HTML-only mail.
+  #
   # For text we show `body_excerpt` — the reply with its quoted history stripped
   # — and hand the remainder to the "Show quoted text" disclosure. For HTML the
   # quoted history is structural (a <blockquote>, a <div class="gmail_quote">,
   # or nothing at all), and splitting it back out reliably isn't achievable, so
   # HTML bodies render whole and get no disclosure.
   def message_body(message)
-    if message.body_html.present?
+    text = message.body_excerpt.presence || message.body_text
+    if text.present?
+      simple_format(text, {class: "mb-3.5 last:mb-0"}, sanitize: true)
+    elsif message.body_html.present?
       inline_images(sanitize_email_html(message.body_html), message)
     else
-      text = message.body_excerpt.presence || message.body_text
-      return tag.p("(no content)", class: "text-faint") if text.blank?
-
-      simple_format(text, {class: "mb-3.5 last:mb-0"}, sanitize: true)
+      tag.p("(no content)", class: "text-faint")
     end
   end
 
   # The quoted block hidden behind the disclosure, or nil when there isn't one.
   # Only meaningful for text bodies — see #message_body.
   def quoted_history(message)
-    return nil if message.body_html.present?
-
     full = message.body_text
     excerpt = message.body_excerpt
     return nil if full.blank? || excerpt.blank?
 
     full.sub(excerpt, "").strip.presence
+  end
+
+  # The ticket properties panel: X-Spool-Meta-* headers merged across the
+  # thread's inbound messages, later messages winning a key. In practice a
+  # form-opened ticket carries them all on its first message; the merge just
+  # means a follow-up that re-reports (a new IP, say) shows the current value.
+  def ticket_spool_meta(messages)
+    messages.select(&:inbound?).reduce({}) { |merged, message| merged.merge(message.spool_meta) }
+  end
+
+  META_LABEL_ACRONYMS = {"ip" => "IP", "url" => "URL", "id" => "ID"}.freeze
+
+  # "product-url" → "Product URL", "access-type" → "Access Type".
+  def spool_meta_label(key)
+    key.split("-").map { |word| META_LABEL_ACRONYMS[word] || word.capitalize }.join(" ")
   end
 
   # Who wrote a thread entry. Inbound carries its own sender name from the mail
@@ -151,6 +168,10 @@ module TicketsHelper
   EMAIL_ATTRIBUTES = %w[href src alt title colspan rowspan].freeze
 
   def sanitize_email_html(html)
+    # sanitize drops a disallowed tag but keeps its inner text, which turns a
+    # <style> block or <title> into a page of visible CSS above the message.
+    # Elements whose content is never prose have to go entirely, first.
+    html = html.gsub(%r{<(script|style|title|head)[^>]*>.*?</\1>}mi, " ")
     sanitize(html, tags: EMAIL_TAGS, attributes: EMAIL_ATTRIBUTES)
   end
 

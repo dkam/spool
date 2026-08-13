@@ -57,6 +57,28 @@
     </div>
   </div>
 
+  <%# Structured details the sending application stamped into X-Spool-Meta-*
+      headers (product, region, IP…) — the "ticket properties" panel of a
+      conventional helpdesk, sourced from the mail itself. Absent entirely for
+      plain human mail. %>
+  <% meta = ticket_spool_meta(@messages) %>
+  <% if meta.any? %>
+    <dl class="flex flex-wrap gap-x-7 gap-y-1.5 mt-3 pb-4 border-b border-rule text-sm">
+      <% meta.each do |key, value| %>
+        <div class="flex items-baseline gap-2 min-w-0">
+          <dt class="uppercase tracking-[0.09em] text-2xs text-faint shrink-0"><%= spool_meta_label(key) %></dt>
+          <dd class="font-mono text-xs text-soft truncate max-w-[28rem]" title="<%= value %>">
+            <% if value.match?(%r{\Ahttps?://}) %>
+              <%= link_to value.sub(%r{\Ahttps?://}, ""), value, class: "hover:text-ink hover:underline", target: "_blank", rel: "noopener" %>
+            <% else %>
+              <%= value %>
+            <% end %>
+          </dd>
+        </div>
+      <% end %>
+    </dl>
+  <% end %>
+
   <% if flash[:alert] %>
     <p class="mt-4 text-sm text-accent"><%= flash[:alert] %></p>
   <% end %>
