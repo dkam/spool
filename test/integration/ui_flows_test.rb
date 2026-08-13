@@ -38,6 +38,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
 
   test "the list renders a ticket with its customer and preview" do
     get root_path
+    follow_redirect!
 
     assert_response :success
     assert_select "h1", "Tickets"
@@ -59,6 +60,60 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     @ticket.update!(state: "pending")
     get tickets_path(state: "waiting")
     assert_match "Can&#39;t connect SMTP", response.body
+  end
+
+  test "a bare inbox URL means Open, the state an inbox is for" do
+    Ticket.create!(customer: @customer, subject: "A closed one",
+      state: "closed", last_activity_at: 1.day.ago)
+
+    get root_path
+    assert_redirected_to tickets_path(state: "open")
+
+    follow_redirect!
+    assert_match "Can&#39;t connect SMTP", response.body
+    assert_no_match(/A closed one/, response.body)
+  end
+
+  test "the list remembers the view you left and restores it on a bare URL" do
+    get tickets_path(state: "closed", assignee: "unassigned")
+
+    get root_path
+    assert_redirected_to tickets_path(state: "closed", assignee: "unassigned")
+  end
+
+  test "All is an explicit choice and is remembered like any other" do
+    Ticket.create!(customer: @customer, subject: "A closed one",
+      state: "closed", last_activity_at: 1.day.ago)
+
+    get tickets_path(state: "all")
+    assert_match "Can&#39;t connect SMTP", response.body
+    assert_match "A closed one", response.body
+
+    get root_path
+    assert_redirected_to tickets_path(state: "all")
+  end
+
+  test "the search query is part of the remembered view" do
+    get tickets_path(state: "open", q: "outbox")
+
+    get root_path
+    assert_redirected_to tickets_path(state: "open", q: "outbox")
+
+    # Clearing the search updates the memory too — it does not come back.
+    get tickets_path(state: "open")
+    get root_path
+    assert_redirected_to tickets_path(state: "open")
+  end
+
+  # The header search box on a ticket screen submits a query but no filters —
+  # it has no list in front of it to read them from. That must keep the state
+  # you were browsing in, not silently reset it.
+  test "a search URL without a state keeps the remembered one" do
+    get tickets_path(state: "closed")
+
+    get tickets_path(q: "outbox")
+    assert_response :success
+    assert_select "input[name=state][value=closed]"
   end
 
   test "assignee filter separates mine, someone else's and unassigned" do
@@ -88,6 +143,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
   # nothing else on the page would look any different for it.
   test "list rows carry the hooks the keyboard needs" do
     get root_path
+    follow_redirect!
 
     assert_select "a[data-shortcuts-target=row][data-ticket-id=?]", @ticket.id.to_s
     assert_select "[data-shortcuts-target=hint]"
@@ -112,9 +168,11 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
 
   # The reason search returns a message id and not just a ticket id.
   test "a result previews the message that matched, not the newest one" do
+    # compose! hands the ball to the customer, so the ticket is now pending —
+    # search across all states, this test is about the preview.
     Message.compose!(ticket: @ticket, agent: agent, text: "Glad that sorted it.")
 
-    get tickets_path(q: "outbox")
+    get tickets_path(q: "outbox", state: "all")
 
     assert_response :success
     assert_match "Nothing leaves the outbox.", response.body
@@ -303,6 +361,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
   # take the nav and the search away from every development instance.
   test "open mode still gets the nav and the search" do
     get root_path
+    follow_redirect!
 
     assert_response :success
     assert_select "input[name=q]"
@@ -313,6 +372,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
 
   test "the footer says which release and what it is running on" do
     get root_path
+    follow_redirect!
 
     assert_select "footer" do
       assert_select "a[href=?]", Spool::SOURCE_URL, text: "GitHub"
@@ -328,6 +388,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     Rails.application.config.x.revision = "abc1234"
 
     get root_path
+    follow_redirect!
 
     assert_select "footer a[href=?]", "#{Spool::SOURCE_URL}/commit/abc1234", text: "abc1234"
   ensure
@@ -342,6 +403,7 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     Rails.application.config.x.revision = "unknown"
 
     get root_path
+    follow_redirect!
 
     assert_select "footer" do |footer|
       assert_no_match(/unknown/, footer.first.to_s)

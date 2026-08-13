@@ -5,6 +5,11 @@ class TicketsController < ApplicationController
   # rather than smeared across the view.
   STATE_FILTERS = {"open" => "open", "waiting" => "pending", "closed" => "closed"}.freeze
 
+  # The URL value for "no state filter". Spelled out rather than left as the
+  # absence of a param, because absence now means something else — "give me the
+  # view I had" (see #restoring_filters?).
+  ALL_STATES = "all"
+
   # A wide cap rather than pagination. The design has no pager, and Pagy is in
   # the Gemfile but unwired (see docs/ui-contract.md); this keeps one screen
   # honest without inventing UI the design doesn't have. Revisit with Pagy when
@@ -12,9 +17,14 @@ class TicketsController < ApplicationController
   LIST_LIMIT = 200
 
   def index
-    @state_filter = params[:state].presence_in(STATE_FILTERS.keys)
+    return redirect_to tickets_path(**remembered_filters) if restoring_filters?
+
+    @state_param = requested_state
+    @state_filter = @state_param.presence_in(STATE_FILTERS.keys)
     @assignee_filter = params[:assignee].presence
     @query = params[:q].to_s.strip.presence
+
+    remember_filters
 
     # Search is another narrowing of this list, not a screen of its own, so it
     # composes with the filters above rather than replacing them.
@@ -65,6 +75,36 @@ class TicketsController < ApplicationController
 
   def ticket_params
     params.expect(ticket: [:state, :assignee_id])
+  end
+
+  # A bare /tickets — no state, assignee or search in the URL — is "take me to
+  # my inbox", and the inbox is wherever you last left it. The remembered
+  # filters are redirected to rather than rendered in place, so the address bar
+  # always says what the list is showing and a copied URL means the same thing
+  # in someone else's browser.
+  def restoring_filters?
+    params.values_at(:state, :assignee, :q).all?(&:blank?)
+  end
+
+  # First visit ever gets Open — the state an inbox exists to show.
+  def remembered_filters
+    session[:ticket_filters].presence&.symbolize_keys || {state: "open"}
+  end
+
+  # Every filter link in the app names its state, "all" included, so a URL with
+  # some filters but no state is an outside arrival — an old bookmark, or the
+  # header search submitted from a ticket screen, which knows the query but not
+  # the list's filters. Those keep the remembered state rather than being
+  # silently widened to everything.
+  def requested_state
+    params[:state].presence_in([ALL_STATES, *STATE_FILTERS.keys]) ||
+      remembered_filters[:state] ||
+      "open"
+  end
+
+  def remember_filters
+    session[:ticket_filters] =
+      {state: @state_param, assignee: @assignee_filter, q: @query}.compact
   end
 
   # A query only becomes a search once it can mean something. One character

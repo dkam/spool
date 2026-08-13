@@ -182,8 +182,10 @@ class SpoolUiTest < ApplicationSystemTestCase
     visit ticket_path(other)
     press :shift, "h"
 
-    # The breadcrumb, not the filter belonging to a different ticket.
-    assert_current_path root_path
+    # The breadcrumb falls back to the bare inbox URL, which restores the
+    # remembered view — not the row-level history belonging to a different
+    # ticket.
+    assert_current_path tickets_path(state: "open")
   end
 
   # T is the way out, where H is the way back: it answers "take me to the
@@ -198,16 +200,16 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Tickets"
   end
 
-  test "t on a narrowed list gives back the whole list" do
+  test "t returns to the list exactly as you left it" do
     visit tickets_path(state: "closed", q: "outbox")
     assert_selector "[data-shortcuts-target='hint']", visible: :all, text: /Tickets/
 
     press :shift, "t"
 
-    # Not tickets_path(state: "closed") — the filter is part of what you are
-    # asking to leave, which is the difference between this key and H.
-    assert_current_path root_path
-    assert_selector "a[data-ticket-id='#{@ticket.id}']"
+    # T visits the bare inbox URL, and the inbox is wherever you last left it —
+    # the narrowing you chose comes back rather than being reset. The chips on
+    # screen say why the list is short, and All is one click away.
+    assert_current_path tickets_path(state: "closed", q: "outbox")
   end
 
   test "typing a capital in the composer is not a shortcut" do

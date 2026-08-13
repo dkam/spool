@@ -3,6 +3,10 @@
   changes the query string, which keeps a filtered list linkable and the back
   button meaningful.
 
+  Every link spells its state out — "all" included, via @state_param — because
+  a URL with no filters at all now means "restore the remembered view" (see the
+  controller). No chip may produce that URL by accident.
+
   Rendered inside the ticket_list turbo-frame along with the list itself, so
   clicking one swaps both the rows and the chips' own active state.
 %>
@@ -10,7 +14,7 @@
   <div class="flex items-baseline gap-3.5">
     <span class="text-faint">State</span>
 
-    <%= link_to "All", tickets_path(q: @query, assignee: @assignee_filter),
+    <%= link_to "All", tickets_path(q: @query, state: "all", assignee: @assignee_filter),
           class: "hover:no-underline #{chip_class(@state_filter.nil?)}" %>
 
     <% TicketsHelper::STATE_FILTER_LABELS.each do |value, label| %>
@@ -22,20 +26,20 @@
   <div class="flex items-baseline gap-3.5">
     <span class="text-faint">Assignee</span>
 
-    <%= link_to "Anyone", tickets_path(q: @query, state: @state_filter),
+    <%= link_to "Anyone", tickets_path(q: @query, state: @state_param),
           class: "hover:no-underline #{chip_class(@assignee_filter.nil?)}" %>
 
-    <%= link_to "Me", tickets_path(q: @query, state: @state_filter, assignee: "me"),
+    <%= link_to "Me", tickets_path(q: @query, state: @state_param, assignee: "me"),
           class: "hover:no-underline #{chip_class(@assignee_filter == "me")}" %>
 
     <% @agents.each do |agent| %>
       <% next if agent.id == current_agent&.id %>
       <%= link_to agent.display_name.split(/\s+/).first,
-            tickets_path(q: @query, state: @state_filter, assignee: agent.id),
+            tickets_path(q: @query, state: @state_param, assignee: agent.id),
             class: "hover:no-underline #{chip_class(@assignee_filter == agent.id.to_s)}" %>
     <% end %>
 
-    <%= link_to "Unassigned", tickets_path(q: @query, state: @state_filter, assignee: "unassigned"),
+    <%= link_to "Unassigned", tickets_path(q: @query, state: @state_param, assignee: "unassigned"),
           class: "hover:no-underline #{chip_class(@assignee_filter == "unassigned")}" %>
   </div>
 
@@ -48,7 +52,7 @@
     <div class="flex items-baseline gap-3.5">
       <span class="text-faint">Search</span>
       <span class="text-ink font-semibold">“<%= @query %>”</span>
-      <%= link_to "Clear", tickets_path(state: @state_filter, assignee: @assignee_filter),
+      <%= link_to "Clear", tickets_path(state: @state_param, assignee: @assignee_filter),
             class: "text-soft hover:text-ink hover:no-underline" %>
     </div>
   <% end %>

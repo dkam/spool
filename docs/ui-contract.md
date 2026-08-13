@@ -230,6 +230,23 @@ response, doesn't find one, and replaces the row with "Content missing". If you
 add a frame, check every link inside it — and cover it with a test that
 *clicks*, not one that `visit`s the destination directly.
 
+## Ticket list filters
+
+The list is narrowed by three query params: `state` (`open` / `waiting` /
+`closed` / `all`), `assignee` (`me` / `unassigned` / an agent id) and `q`.
+
+A URL with **no filter params at all** does not mean "everything" — it means
+"my inbox", and redirects to the view you last had (stored per session in
+`session[:ticket_filters]`), defaulting to `state=open` on a first visit.
+Two consequences:
+
+- "all" is an explicit param value, and every filter link in the views names
+  its state via `@state_param` — no internal link may generate a bare
+  `/tickets` by accident.
+- A URL with *some* params but no `state` (an old bookmark, the header search
+  submitted from a ticket screen) keeps the remembered state rather than
+  widening to everything.
+
 ## Search
 
 ```ruby

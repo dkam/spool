@@ -49,8 +49,10 @@
             action: "input->search#schedule keydown.esc->search#clear"
           } do |form| %>
       <%# The filters are the list's other narrowing and must survive a search;
-          without these, typing in the box would silently drop them. %>
-      <%= form.hidden_field :state, value: @state_filter, id: nil if @state_filter %>
+          without these, typing in the box would silently drop them. On screens
+          other than the list @state_param is unset and the field is omitted —
+          the controller falls back to the remembered state. %>
+      <%= form.hidden_field :state, value: @state_param, id: nil if @state_param %>
       <%= form.hidden_field :assignee, value: @assignee_filter, id: nil if @assignee_filter %>
 
       <%= form.search_field :q, value: @query, placeholder: "Search",

@@ -73,14 +73,14 @@
               least visible. Offering the wider search costs nothing and does
               not claim there is anything there. %>
           <% if @state_filter || @assignee_filter %>
-            <%= link_to "Search all tickets", tickets_path(q: @query), class: "text-ink underline" %>.
+            <%= link_to "Search all tickets", tickets_path(q: @query, state: "all"), class: "text-ink underline" %>.
           <% end %>
         <% elsif @query.present? %>
           Keep typing — search needs at least <%= Customer::MIN_SEARCH_LENGTH %> characters.
         <% else %>
           Nothing here.
           <% if @state_filter || @assignee_filter %>
-            <%= link_to "Clear the filters", tickets_path, class: "text-ink underline" %> to see every ticket.
+            <%= link_to "Clear the filters", tickets_path(state: "all"), class: "text-ink underline" %> to see every ticket.
           <% end %>
         <% end %>
       </p>
