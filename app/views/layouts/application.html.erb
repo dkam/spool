@@ -9,6 +9,12 @@
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
+    <%# Broadcast refreshes (see Ticket's after_commit hooks) re-fetch the page;
+        morphing patches the DOM in place instead of replacing it, so a refresh
+        that lands mid-read doesn't yank the scroll position or blank the
+        screen. The composer opts out entirely — see _composer.html.erb. %>
+    <%= turbo_refreshes_with method: :morph, scroll: :preserve %>
+
     <%# Runs before first paint so a dark-theme user never sees a white flash.
         Stimulus connects too late for this — by then the page has painted.
         Turbo replaces <body> and leaves <html> alone, so the attribute set

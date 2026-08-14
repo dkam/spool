@@ -9,6 +9,24 @@ class Ticket < ApplicationRecord
 
   validates :state, presence: true, inclusion: {in: STATES}
 
+  # Live updates, as Turbo 8 page refreshes: any commit to a ticket row tells
+  # subscribed browsers to re-fetch what they're looking at, and morphing keeps
+  # the result calm. The ticket row is the one reliable signal — every event
+  # (inbound mail, reply, note, state or assignee change) writes it, so there
+  # is nothing to broadcast from Message.
+  #
+  # Synchronous rather than *_later on purpose: a refresh broadcast is one
+  # small insert into the cable database, and routing it through the job queue
+  # would make "the screen is live" depend on a worker being up.
+  #
+  # :tickets is the list screen's stream; self is the ticket's own. An update
+  # feeds both — a reply must move the list row *and* the open thread.
+  after_create_commit -> { broadcast_refresh_to :tickets }
+  after_update_commit -> {
+    broadcast_refresh_to :tickets
+    broadcast_refresh
+  }
+
   scope :open_state, -> { where(state: "open") }
   scope :pending, -> { where(state: "pending") }
   scope :closed, -> { where(state: "closed") }

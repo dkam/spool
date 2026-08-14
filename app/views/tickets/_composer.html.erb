@@ -9,7 +9,11 @@
 
   Locals: ticket, templates
 %>
+<%# data-turbo-permanent: morph refreshes (a reply arriving while you type)
+    must not touch this subtree, or the draft and the reply/note toggle state
+    would be silently reset. Permanence keys on the id. %>
 <section id="compose" class="mt-12 border-t border-rule-strong pt-[18px]"
+         data-turbo-permanent
          data-controller="composer"
          data-composer-note-class="text-ink">
 

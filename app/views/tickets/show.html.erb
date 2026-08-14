@@ -6,6 +6,12 @@
   <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
 <% end %>
 
+<%# This ticket's own stream: a commit to the row (new message, state or
+    assignee change) refreshes the thread live. The refresh is a normal GET of
+    this action, so it also marks the new arrival read — you are looking
+    straight at it. %>
+<%= turbo_stream_from @ticket %>
+
 <div class="max-w-[880px] px-14 pt-11 pb-30">
   <div class="flex items-baseline gap-3 text-sm text-soft">
     <%# Doubles as the keyboard's way out: H returns to the list this ticket

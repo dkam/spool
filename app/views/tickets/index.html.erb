@@ -7,6 +7,12 @@
   <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
 <% end %>
 
+<%# Any ticket commit refreshes this page (Ticket broadcasts to :tickets), so
+    new mail and other agents' changes appear without reloading. The re-fetch
+    runs through the controller as usual — filters, search and the 200-row cap
+    all still apply. %>
+<%= turbo_stream_from :tickets %>
+
 <div class="max-w-[1000px] px-14 pt-12 pb-24">
   <div class="flex items-baseline gap-4">
     <h1 class="text-title font-bold tracking-[-0.02em]">Tickets</h1>
