@@ -18,6 +18,7 @@ recorded here, change the document in the same commit.
 | [compression.md](compression.md) | zstd layer, dictionaries, when and how to train them |
 | [queue.md](queue.md) | Tuber, consumers, the scheduler, the Active Job adapter |
 | [auth.md](auth.md) | OIDC, the allowlist, the three configuration states |
+| [tags.md](tags.md) | Ticket tags, the spam tag, blocked senders, what the inbox hides |
 | [ui-contract.md](ui-contract.md) | The model API the views are built against |
 | [ui.md](ui.md) | The screens: design tokens, screen anatomy, Stimulus and Turbo conventions |
 | [deploy.md](deploy.md) | Docker image, versioning, release, what CI runs |

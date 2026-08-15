@@ -23,6 +23,11 @@ class TicketsController < ApplicationController
     @state_filter = @state_param.presence_in(STATE_FILTERS.keys)
     @assignee_filter = params[:assignee].presence
     @query = params[:q].to_s.strip.presence
+    # Validated against the tags that exist, so a remembered filter for a tag
+    # that has since been deleted degrades to the inbox rather than to an
+    # inexplicably empty list.
+    @tag_names = Tag.order(:name).pluck(:name)
+    @tag_filter = params[:tag].presence_in(@tag_names)
 
     remember_filters
 
@@ -39,16 +44,19 @@ class TicketsController < ApplicationController
     @tickets = filtered_tickets
     @latest_messages = latest_messages_for(@tickets)
 
-    @open_count = Ticket.open_state.count
+    # Both counts skip spam-tagged tickets: they are open in the column but
+    # hidden from the inbox, and a badge that nags about tickets the list
+    # refuses to show would read as a bug.
+    @open_count = Ticket.open_state.not_tagged(Tag::SPAM).count
     # Scoped to unresolved: a closed ticket nobody ever opened is not something
     # the header should nag about.
-    @unread_count = Ticket.unresolved.unread_for(current_agent).count
+    @unread_count = Ticket.unresolved.not_tagged(Tag::SPAM).unread_for(current_agent).count
     @agents = Agent.order(:name, :email).to_a
     @agents_by_id = @agents.index_by(&:id)
   end
 
   def show
-    @ticket = Ticket.includes(:customer, :assignee).find(params[:id])
+    @ticket = Ticket.includes(:customer, :assignee, :tags).find(params[:id])
     @messages = @ticket.messages
       .includes(:agent, message_attachments: :attachment)
       .chronological
@@ -71,6 +79,23 @@ class TicketsController < ApplicationController
     redirect_back fallback_location: ticket_path(@ticket)
   end
 
+  # Spam is a paired write — tag the ticket, block the sender — so it gets its
+  # own actions rather than riding through #update, where the two halves could
+  # be set separately and disagree. The model owns the pairing.
+  def mark_spam
+    @ticket = Ticket.find(params[:id])
+    @ticket.mark_spam!
+
+    redirect_back fallback_location: ticket_path(@ticket)
+  end
+
+  def unmark_spam
+    @ticket = Ticket.find(params[:id])
+    @ticket.unmark_spam!
+
+    redirect_back fallback_location: ticket_path(@ticket)
+  end
+
   private
 
   def ticket_params
@@ -83,7 +108,7 @@ class TicketsController < ApplicationController
   # always says what the list is showing and a copied URL means the same thing
   # in someone else's browser.
   def restoring_filters?
-    params.values_at(:state, :assignee, :q).all?(&:blank?)
+    params.values_at(:state, :assignee, :q, :tag).all?(&:blank?)
   end
 
   # First visit ever gets Open — the state an inbox exists to show.
@@ -104,7 +129,7 @@ class TicketsController < ApplicationController
 
   def remember_filters
     session[:ticket_filters] =
-      {state: @state_param, assignee: @assignee_filter, q: @query}.compact
+      {state: @state_param, assignee: @assignee_filter, q: @query, tag: @tag_filter}.compact
   end
 
   # A query only becomes a search once it can mean something. One character
@@ -128,6 +153,10 @@ class TicketsController < ApplicationController
     scope = scope.where(id: @matches.keys) if searching?
 
     scope = scope.where(state: STATE_FILTERS.fetch(@state_filter)) if @state_filter
+
+    # No tag filter means the inbox, and the inbox hides spam — the same deal
+    # every mail client offers. The spam chip is the way in, not a wider "all".
+    scope = @tag_filter ? scope.tagged(@tag_filter) : scope.not_tagged(Tag::SPAM)
 
     case @assignee_filter
     when nil then scope

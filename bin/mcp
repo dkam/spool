@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Spool's MCP server over stdio — see docs/mcp.md. Registered for this repo in
+# .mcp.json, so Claude Code starts it on demand; it can also be poked by hand:
+#
+#   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | bin/mcp
+#
+# JSON-RPC frames own stdout in this process. Anything else printed there
+# corrupts the stream, so logging is pointed at log/mcp.log before the
+# transport opens.
+ENV["RAILS_ENV"] ||= "development"
+require_relative "../config/environment"
+
+logger = ActiveSupport::Logger.new(Rails.root.join("log/mcp.log"))
+Rails.logger = ActiveSupport::BroadcastLogger.new(logger)
+ActiveRecord::Base.logger = logger
+
+MCP::Server::Transports::StdioTransport.new(SpoolMcp.server).open

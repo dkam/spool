@@ -61,6 +61,11 @@ gem "jwt"
 # Pagination for the ticket list.
 gem "pagy", "~> 43.0"
 
+# Model Context Protocol server (official Ruby SDK), so agents can drive Spool
+# through typed tools instead of scraping the UI. Served over stdio by bin/mcp;
+# tools live in app/mcp. See docs/mcp.md.
+gem "mcp"
+
 # Error tracking and light APM, over the Sentry protocol. Inert unless
 # SENTRY_DSN is set, so development and test send nothing. Developed against
 # ../splat, which speaks the same protocol — see config/initializers/sentry.rb.

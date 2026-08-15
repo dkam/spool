@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_000003) do
   create_table "agents", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -32,6 +32,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
   end
 
   create_table "customers", force: :cascade do |t|
+    t.datetime "blocked_at"
     t.datetime "created_at", null: false
     t.string "email", null: false
     t.string "name"
@@ -104,6 +105,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
     t.index ["user_email"], name: "index_oidc_sessions_on_user_email"
   end
 
+  create_table "tags", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_tags_on_name", unique: true
+  end
+
   create_table "templates", force: :cascade do |t|
     t.text "body"
     t.datetime "created_at", null: false
@@ -119,6 +127,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
     t.index ["agent_id", "ticket_id"], name: "index_ticket_reads_on_agent_id_and_ticket_id", unique: true
     t.index ["agent_id"], name: "index_ticket_reads_on_agent_id"
     t.index ["ticket_id"], name: "index_ticket_reads_on_ticket_id"
+  end
+
+  create_table "ticket_tags", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "tag_id", null: false
+    t.integer "ticket_id", null: false
+    t.index ["tag_id"], name: "index_ticket_tags_on_tag_id"
+    t.index ["ticket_id", "tag_id"], name: "index_ticket_tags_on_ticket_id_and_tag_id", unique: true
+    t.index ["ticket_id"], name: "index_ticket_tags_on_ticket_id"
   end
 
   create_table "tickets", force: :cascade do |t|
@@ -141,6 +158,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_000001) do
   add_foreign_key "messages", "tickets"
   add_foreign_key "ticket_reads", "agents"
   add_foreign_key "ticket_reads", "tickets"
+  add_foreign_key "ticket_tags", "tags"
+  add_foreign_key "ticket_tags", "tickets"
   add_foreign_key "tickets", "agents", column: "assignee_id"
   add_foreign_key "tickets", "customers"
 end

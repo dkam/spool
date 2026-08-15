@@ -26,7 +26,8 @@ ticket.last_activity_at  # the only sort key the list uses
 ```
 
 Scopes: `open_state`, `pending`, `closed`, `unresolved` (open + pending),
-`recent_first`, `assigned_to(agent)`, `unassigned`, `unread_for(agent)`.
+`recent_first`, `assigned_to(agent)`, `unassigned`, `unread_for(agent)`,
+`tagged(name)`, `not_tagged(name)`.
 
 `open_state`, not `open` — `open` is taken by `Object#open` and shadowing it in a
 scope is a trap.
@@ -37,6 +38,24 @@ State transitions go through `record_inbound_activity!(at)` (→ open) and
 
 `ticket.tagged_subject` appends `[#id]` for outbound subjects — that tag is a
 threading fallback, so don't strip it from what gets sent.
+
+### Tags
+
+```ruby
+ticket.tags               # Tag records; names are lowercase
+ticket.tag!("billing")    # created on first use; idempotent
+ticket.untag!("billing")  # unknown names are a no-op
+ticket.tagged?("billing")
+ticket.spam?              # tagged?(Tag::SPAM)
+ticket.mark_spam!         # tags spam AND blocks the customer — one transaction
+ticket.unmark_spam!       # takes both back
+```
+
+Use `mark_spam!`/`unmark_spam!` for spam, never `tag!("spam")` directly — spam
+is a paired write and the model owns the pairing. **Every list view must hide
+spam** unless the spam tag is the active filter: filter through
+`not_tagged(Tag::SPAM)` by default, and keep any count badge on the same scope
+as the list it describes. See [tags.md](tags.md).
 
 ### Read state
 
@@ -127,7 +146,11 @@ customer.tickets
 customer.notes          # free-text, agent-editable
 customer.display_name   # name, falling back to email
 customer.email
+customer.blocked?       # their mail still arrives, but lands tagged spam
 ```
+
+`blocked_at` is set and cleared by `Ticket#mark_spam!` / `#unmark_spam!` — a
+view should read it, not write it.
 
 ## Agent
 
@@ -232,8 +255,10 @@ add a frame, check every link inside it — and cover it with a test that
 
 ## Ticket list filters
 
-The list is narrowed by three query params: `state` (`open` / `waiting` /
-`closed` / `all`), `assignee` (`me` / `unassigned` / an agent id) and `q`.
+The list is narrowed by four query params: `state` (`open` / `waiting` /
+`closed` / `all`), `assignee` (`me` / `unassigned` / an agent id), `q` and
+`tag` (a tag name; no tag means the inbox, which hides spam — see
+[tags.md](tags.md)).
 
 A URL with **no filter params at all** does not mean "everything" — it means
 "my inbox", and redirects to the view you last had (stored per session in

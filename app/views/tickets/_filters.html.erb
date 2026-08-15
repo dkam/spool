@@ -1,5 +1,5 @@
 <%#
-  State and assignee filters. Plain links, not a form: each is a GET that
+  State, assignee and tag filters. Plain links, not a form: each is a GET that
   changes the query string, which keeps a filtered list linkable and the back
   button meaningful.
 
@@ -14,11 +14,11 @@
   <div class="flex items-baseline gap-3.5">
     <span class="text-faint">State</span>
 
-    <%= link_to "All", tickets_path(q: @query, state: "all", assignee: @assignee_filter),
+    <%= link_to "All", tickets_path(q: @query, state: "all", assignee: @assignee_filter, tag: @tag_filter),
           class: "hover:no-underline #{chip_class(@state_filter.nil?)}" %>
 
     <% TicketsHelper::STATE_FILTER_LABELS.each do |value, label| %>
-      <%= link_to label, tickets_path(q: @query, state: value, assignee: @assignee_filter),
+      <%= link_to label, tickets_path(q: @query, state: value, assignee: @assignee_filter, tag: @tag_filter),
             class: "hover:no-underline #{chip_class(@state_filter == value)}" %>
     <% end %>
   </div>
@@ -26,22 +26,41 @@
   <div class="flex items-baseline gap-3.5">
     <span class="text-faint">Assignee</span>
 
-    <%= link_to "Anyone", tickets_path(q: @query, state: @state_param),
+    <%= link_to "Anyone", tickets_path(q: @query, state: @state_param, tag: @tag_filter),
           class: "hover:no-underline #{chip_class(@assignee_filter.nil?)}" %>
 
-    <%= link_to "Me", tickets_path(q: @query, state: @state_param, assignee: "me"),
+    <%= link_to "Me", tickets_path(q: @query, state: @state_param, assignee: "me", tag: @tag_filter),
           class: "hover:no-underline #{chip_class(@assignee_filter == "me")}" %>
 
     <% @agents.each do |agent| %>
       <% next if agent.id == current_agent&.id %>
       <%= link_to agent.display_name.split(/\s+/).first,
-            tickets_path(q: @query, state: @state_param, assignee: agent.id),
+            tickets_path(q: @query, state: @state_param, assignee: agent.id, tag: @tag_filter),
             class: "hover:no-underline #{chip_class(@assignee_filter == agent.id.to_s)}" %>
     <% end %>
 
-    <%= link_to "Unassigned", tickets_path(q: @query, state: @state_param, assignee: "unassigned"),
+    <%= link_to "Unassigned", tickets_path(q: @query, state: @state_param, assignee: "unassigned", tag: @tag_filter),
           class: "hover:no-underline #{chip_class(@assignee_filter == "unassigned")}" %>
   </div>
+
+  <%# Tag chips toggle: clicking one narrows to that tag, clicking it again
+      returns to the inbox — so the group needs no chip naming the default
+      view. The group only exists once a tag does; until then there is nothing
+      to filter by. Note what no-tag means: the inbox hides spam-tagged
+      tickets (the same deal every mail client offers), so the spam chip is a
+      place you go, not a narrowing of what you were looking at. %>
+  <% if @tag_names.any? %>
+    <div class="flex items-baseline gap-3.5">
+      <span class="text-faint">Tags</span>
+
+      <% @tag_names.each do |name| %>
+        <% active = @tag_filter == name %>
+        <%= link_to name,
+              tickets_path(q: @query, state: @state_param, assignee: @assignee_filter, tag: active ? nil : name),
+              class: "hover:no-underline #{chip_class(active)}" %>
+      <% end %>
+    </div>
+  <% end %>
 
   <%# The search shown as one more active narrowing, and removable like one.
       Without this a searched inbox is indistinguishable from a quiet one: you
@@ -52,7 +71,7 @@
     <div class="flex items-baseline gap-3.5">
       <span class="text-faint">Search</span>
       <span class="text-ink font-semibold">“<%= @query %>”</span>
-      <%= link_to "Clear", tickets_path(state: @state_param, assignee: @assignee_filter),
+      <%= link_to "Clear", tickets_path(state: @state_param, assignee: @assignee_filter, tag: @tag_filter),
             class: "text-soft hover:text-ink hover:no-underline" %>
     </div>
   <% end %>

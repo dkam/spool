@@ -284,6 +284,36 @@ class Ingest::InboundTest < ActiveSupport::TestCase
     assert_operator message.raw_size, :>, 0
   end
 
+  # --- blocked senders -----------------------------------------------------
+
+  test "mail from a blocked sender is stored like any other, but tagged spam" do
+    Customer.create!(email: "ada@example.com").block!
+
+    result = ingest(:new_ticket)
+
+    assert result.created?, "a block must never drop mail — that is what makes it recoverable"
+    assert result.ticket.spam?
+    # State stays open on purpose: untag it and it is back in the inbox
+    # exactly as it would have arrived.
+    assert_equal "open", result.ticket.state
+  end
+
+  test "a blocked sender's reply threads onto its ticket and keeps it tagged" do
+    first = ingest(:new_ticket)
+    first.ticket.mark_spam!
+
+    second = ingest(:reply_in_reply_to)
+
+    assert_equal first.ticket.id, second.ticket.id
+    assert second.ticket.spam?
+  end
+
+  test "an unblocked sender's mail carries no tag" do
+    result = ingest(:new_ticket)
+
+    assert_not result.ticket.spam?
+  end
+
   # --- search --------------------------------------------------------------
 
   test "ingested messages are findable through FTS5" do

@@ -87,6 +87,15 @@ module Ingest
         # closed filter.
         ticket.record_inbound_activity!(sent_at)
 
+        # A blocked sender's mail is stored like any other — dropping it here
+        # would make a wrong block unrecoverable — but the ticket goes to the
+        # spam view instead of the inbox. State stays open on purpose: untag
+        # it and it is back in the inbox exactly as it would have arrived.
+        if customer.blocked?
+          ticket.tag!(Tag::SPAM)
+          Rails.logger.info "[Ingest] tagged spam (blocked sender #{customer.email})"
+        end
+
         Rails.logger.info(
           "[Ingest] #{message_id} → ticket #{ticket.id} " \
           "(#{split.attachments.size} attachment(s), source=#{source || "unknown"})"

@@ -21,7 +21,15 @@
   </div>
 
   <h1 class="text-title font-bold tracking-[-0.02em] mt-2.5"><%= @customer.display_name %></h1>
-  <div class="mt-2 font-mono text-sm text-soft"><%= @customer.email %></div>
+  <div class="mt-2 flex items-baseline gap-3">
+    <span class="font-mono text-sm text-soft"><%= @customer.email %></span>
+    <%# Blocked means their mail still arrives but lands tagged spam — worth
+        saying on the one screen that is about the person. Cleared by "Not
+        spam" on any of their tickets. %>
+    <% if @customer.blocked? %>
+      <span class="uppercase tracking-[0.09em] text-2xs text-accent">Blocked · new mail is tagged spam</span>
+    <% end %>
+  </div>
 
   <%# Four equal cells with a rule above and below — the modular grid the design
       system asks for, and the reason these four facts read as one block.

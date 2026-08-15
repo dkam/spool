@@ -312,6 +312,70 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_nil @ticket.reload.assignee_id
   end
 
+  # --- Spam and tags --------------------------------------------------------
+
+  test "marking spam tags the ticket, blocks the sender, and hides it from every list" do
+    post spam_ticket_path(@ticket)
+
+    assert_redirected_to ticket_path(@ticket)
+    assert @ticket.reload.spam?
+    assert @customer.reload.blocked?
+
+    # Hidden from the inbox, and from "all" — spam is a place you go, not a
+    # state you widen into.
+    get tickets_path(state: "open")
+    assert_no_match(/Can&#39;t connect SMTP/, response.body)
+    get tickets_path(state: "all")
+    assert_no_match(/Can&#39;t connect SMTP/, response.body)
+
+    get tickets_path(state: "all", tag: "spam")
+    assert_match "Can&#39;t connect SMTP", response.body
+  end
+
+  test "not spam puts the ticket back and unblocks the sender" do
+    @ticket.mark_spam!
+
+    delete spam_ticket_path(@ticket)
+
+    assert_not @ticket.reload.spam?
+    assert_not @customer.reload.blocked?
+
+    get tickets_path(state: "open")
+    assert_match "Can&#39;t connect SMTP", response.body
+  end
+
+  test "the tag filter is part of the remembered view" do
+    @ticket.mark_spam!
+
+    get tickets_path(state: "all", tag: "spam")
+
+    get root_path
+    assert_redirected_to tickets_path(state: "all", tag: "spam")
+  end
+
+  test "a tag that no longer exists degrades to the inbox rather than an empty list" do
+    get tickets_path(state: "open", tag: "vanished")
+
+    assert_response :success
+    assert_match "Can&#39;t connect SMTP", response.body
+  end
+
+  test "tag chips only appear once a tag exists" do
+    get tickets_path(state: "open")
+    assert_no_match(/>Tags</, response.body)
+
+    other = Ticket.create!(customer: @customer, subject: "Junk",
+      state: "open", last_activity_at: 1.minute.ago)
+    other.mark_spam!
+
+    # The chip row shows the way into the spam view even though the spam
+    # ticket itself is hidden from this list.
+    get tickets_path(state: "open")
+    assert_match(/>Tags</, response.body)
+    assert_select "a", text: "spam"
+    assert_no_match(/>Junk</, response.body)
+  end
+
   # --- Customer screen ------------------------------------------------------
 
   test "the customer screen lists their tickets" do

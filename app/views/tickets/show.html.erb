@@ -36,6 +36,15 @@
       <%= ticket_state_label(@ticket) %> · <%= assignment_phrase(@ticket) %>
     </span>
 
+    <%# Tags read in the same register as the state — they are facts about the
+        conversation, not controls. Spam gets the accent: it explains why this
+        ticket is not in the inbox. %>
+    <% @ticket.tags.each do |t| %>
+      <span class="uppercase tracking-[0.09em] text-2xs <%= t.name == Tag::SPAM ? "text-accent" : "text-faint" %>">
+        <%= t.name %>
+      </span>
+    <% end %>
+
     <div class="ml-auto flex items-baseline gap-5">
       <%# Assign is a select rather than the design's plain button: the design
           had nowhere to put the list of agents, and a native select is the
@@ -47,6 +56,17 @@
               { include_blank: "Unassigned" },
               data: { action: "change->autosubmit#submit" },
               class: "cursor-pointer bg-transparent text-soft hover:text-ink border-0 p-0 text-sm focus:text-ink" %>
+      <% end %>
+
+      <%# Spam pairs two writes — tag this ticket, block the sender — and the
+          inverse takes both back. The customer's future mail is still stored,
+          just tagged on arrival; see Ingest::Inbound. %>
+      <% if @ticket.spam? %>
+        <%= button_to "Not spam", spam_ticket_path(@ticket), method: :delete,
+              class: "cursor-pointer text-soft hover:text-ink" %>
+      <% else %>
+        <%= button_to "Spam", spam_ticket_path(@ticket), method: :post,
+              class: "cursor-pointer text-soft hover:text-ink" %>
       <% end %>
 
       <%# Closed tickets reopen from the same spot rather than growing a fourth

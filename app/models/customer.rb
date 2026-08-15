@@ -28,6 +28,20 @@ class Customer < ApplicationRecord
     name.presence || email
   end
 
+  # A blocked customer's mail is still ingested — Ingest::Inbound tags the
+  # ticket spam instead of dropping the message, so a wrong block is
+  # recoverable from the spam view rather than silent. Set and cleared through
+  # Ticket#mark_spam! / #unmark_spam! in the normal flow.
+  def blocked? = blocked_at.present?
+
+  def block!
+    update!(blocked_at: Time.current) unless blocked?
+  end
+
+  def unblock!
+    update!(blocked_at: nil) if blocked?
+  end
+
   # Anything shorter matches most of the table and answers nothing.
   MIN_SEARCH_LENGTH = 2
 

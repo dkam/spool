@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "spool": {
+      "type": "stdio",
+      "command": "bin/mcp"
+    }
+  }
+}

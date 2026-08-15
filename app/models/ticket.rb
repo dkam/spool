@@ -6,6 +6,8 @@ class Ticket < ApplicationRecord
 
   has_many :messages, dependent: :destroy
   has_many :ticket_reads, dependent: :delete_all
+  has_many :ticket_tags, dependent: :delete_all
+  has_many :tags, through: :ticket_tags
 
   validates :state, presence: true, inclusion: {in: STATES}
 
@@ -34,6 +36,26 @@ class Ticket < ApplicationRecord
   scope :recent_first, -> { order(last_activity_at: :desc) }
   scope :assigned_to, ->(agent) { where(assignee: agent) }
   scope :unassigned, -> { where(assignee_id: nil) }
+
+  # The unique index on ticket_tags means a name matches at most one join row
+  # per ticket, so this join can't multiply rows — safe to compose with
+  # .with_read_state_for, whose select list a DISTINCT would collide with.
+  scope :tagged, ->(name) {
+    joins(:tags).where(tags: {name: Tag.normalize_value_for(:name, name)})
+  }
+
+  # NOT EXISTS for the same reason as .unread_for: a ticket with *other* tags
+  # must still count as not-tagged, and it also keeps the ticket_tags join out
+  # of the outer query's row count.
+  scope :not_tagged, ->(name) {
+    where.not(
+      TicketTag
+        .joins(:tag)
+        .where(tags: {name: Tag.normalize_value_for(:name, name)})
+        .where("ticket_tags.ticket_id = tickets.id")
+        .arel.exists
+    )
+  }
 
   # A ticket is read for an agent when a ticket_reads row exists whose
   # last_read_at is at least as recent as the ticket's last_activity_at.
@@ -113,6 +135,58 @@ class Ticket < ApplicationRecord
 
   def mark_read!(agent)
     TicketRead.mark_read!(agent: agent, ticket: self)
+  end
+
+  # Tags describe the conversation and are orthogonal to state — a spam ticket
+  # that turns out to be a real customer goes back into the inbox without
+  # losing where it was in open/pending/closed.
+  #
+  # Both writes touch the ticket row when they change anything, because the row
+  # is the broadcast signal (see the callbacks above) and a tag change moves
+  # the ticket between list views.
+  def tag!(name)
+    tag = Tag.named!(name)
+    ticket_tags.create!(tag: tag)
+    touch
+  rescue ActiveRecord::RecordNotUnique
+    # Already tagged — by a concurrent worker, or an agent double-clicking.
+  end
+
+  def untag!(name)
+    tag = Tag.find_by(name: Tag.normalize_value_for(:name, name))
+    return if tag.nil?
+
+    touch if ticket_tags.where(tag: tag).delete_all.positive?
+  end
+
+  def tagged?(name)
+    normalized = Tag.normalize_value_for(:name, name)
+    return tags.any? { |tag| tag.name == normalized } if tags.loaded?
+
+    tags.exists?(name: normalized)
+  end
+
+  def spam? = tagged?(Tag::SPAM)
+
+  # The two halves of "this is spam": hide the ticket, and stop the next one
+  # from landing in the inbox at all — Ingest::Inbound tags mail from a
+  # blocked customer on arrival. One method so the UI and MCP can't apply half.
+  #
+  # Deliberately not a rejection: the mail is still ingested and stored, so a
+  # wrong block costs a ticket sitting in the spam view, not a customer's
+  # email vanishing without trace.
+  def mark_spam!
+    transaction do
+      tag!(Tag::SPAM)
+      customer.block!
+    end
+  end
+
+  def unmark_spam!
+    transaction do
+      untag!(Tag::SPAM)
+      customer.unblock!
+    end
   end
 
   # The message a reply should thread onto: the most recent one that actually

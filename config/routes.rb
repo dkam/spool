@@ -22,6 +22,14 @@ Rails.application.routes.draw do
 
   resources :tickets, only: %i[index show update] do
     resources :messages, only: %i[create], shallow: true
+
+    # One path, two verbs: POST marks spam (tag + block the sender), DELETE
+    # takes it back. Not folded into #update — spam is a paired write the
+    # model owns, not an attribute.
+    member do
+      post :spam, action: :mark_spam
+      delete :spam, action: :unmark_spam, as: nil
+    end
   end
 
   # Notes are the only editable field on the customer screen, and they save from

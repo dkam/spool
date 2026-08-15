@@ -47,6 +47,12 @@ message straight back to it.
 
 Every rejection is logged with its reason. Nothing is stored.
 
+**A blocked sender is not a rejection rule.** Mail from a customer with
+`blocked_at` set is ingested and stored like any other — the ticket is tagged
+`spam` and hidden from the inbox instead. Rejection is for mail that is
+mechanically not correspondence; a block is a human judgment that is sometimes
+wrong, and its worst case has to be recoverable. See [tags.md](tags.md).
+
 ## Idempotency
 
 Both retry paths — a JMAP re-poll, a provider redelivery — can deliver the same
