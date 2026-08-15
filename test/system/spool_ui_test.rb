@@ -124,9 +124,10 @@ class SpoolUiTest < ApplicationSystemTestCase
     click_button "Send reply"
 
     assert_text "Pin smtp_tls to starttls."
-    # Rendered uppercase by the stylesheet, so match the label case-insensitively
-    # rather than asserting on how CSS happened to draw it.
-    assert_text(/sent to customer/i)
+    # Delivery is async, so the label is the honest "queued" one until Mailgun
+    # accepts the send. Rendered uppercase by the stylesheet, so match it
+    # case-insensitively rather than asserting on how CSS happened to draw it.
+    assert_text(/queued · not yet delivered/i)
     assert_equal "pending", @ticket.reload.state
   end
 
