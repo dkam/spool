@@ -3,7 +3,7 @@ class MessagesController < ApplicationController
   # action stays a thin translation of form params. The thread and the ticket
   # state are correct the moment an agent hits send; delivery happens
   # asynchronously off spool.outbound (see docs/outbound.md), and the thread
-  # shows "Queued · not yet delivered" until Mailgun accepts it.
+  # shows "Queued · not yet delivered" until the transport accepts it.
   def create
     @ticket = Ticket.find(params[:ticket_id])
     text = params[:body].to_s.strip

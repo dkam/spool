@@ -6,7 +6,7 @@ require "test_helper"
 # the consumer is thin on purpose. What is Spool's to get right: the MIME is
 # built from exactly what compose! stored (threading headers above all),
 # delivered_at makes the send idempotent, and enqueueing is skipped rather
-# than broken when Mailgun isn't configured.
+# than broken when no transport is configured.
 class OutboundDeliveryTest < ActiveSupport::TestCase
   MAILGUN_ENV = {
     "MAILGUN_API_KEY" => "key-test",
@@ -14,16 +14,27 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
     "SPOOL_MAILBOX" => "support@example.com"
   }.freeze
 
-  class FakeMailgun
-    attr_reader :deliveries
+  SMTP_ENV = {
+    "SMTP_ADDRESS" => "smtp.fastmail.com",
+    "SMTP_PORT" => "587",
+    "SMTP_USER_NAME" => "booko@booko.com.au",
+    "SMTP_PASSWORD" => "secret",
+    "SPOOL_MAILBOX" => "support@example.com"
+  }.freeze
 
-    def initialize
+  # A fake transport duck-typed against the seam (deliver_mime(to:, mime:) →
+  # a string for the log line). Stands in for either Mailgun or SMTP.
+  class FakeTransport
+    attr_reader :deliveries, :name
+
+    def initialize(name: "fake")
       @deliveries = []
+      @name = name
     end
 
     def deliver_mime(to:, mime:)
       @deliveries << {to: to, mime: mime}
-      "<queued@mailgun>"
+      "<queued@#{name}>"
     end
   end
 
@@ -40,7 +51,7 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
       body: JSON.generate({"text" => "Nothing leaves the outbox.", "html" => nil}),
       body_excerpt: "Nothing leaves the outbox."
     )
-    @mailgun = FakeMailgun.new
+    @transport = FakeTransport.new(name: "mailgun")
   end
 
   # Swap Ingest::Tuber.put for the duration of the block. Hand-rolled because
@@ -55,20 +66,28 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
 
   # Compose is done outside the configured block, so nothing here ever touches
   # a real queue; the env only wraps the delivery under test.
-  def with_mailgun_env
-    previous = MAILGUN_ENV.keys.index_with { |key| ENV[key] }
-    MAILGUN_ENV.each { |key, value| ENV[key] = value }
+  def with_env(vars)
+    previous = vars.keys.index_with { |key| ENV[key] }
+    vars.each { |key, value| ENV[key] = value }
     yield
   ensure
     previous.each { |key, value| ENV[key] = value }
   end
 
+  def with_mailgun_env(&block)
+    with_env(MAILGUN_ENV, &block)
+  end
+
+  def with_smtp_env(&block)
+    with_env(SMTP_ENV, &block)
+  end
+
   test "builds the email from what compose! stored — headers, threading and all" do
     message = Message.compose!(ticket: @ticket, agent: @agent, text: "Fixed — try again?")
 
-    with_mailgun_env { Outbound::Delivery.deliver!(message, mailgun: @mailgun) }
+    with_mailgun_env { Outbound::Delivery.deliver!(message, transport: @transport) }
 
-    delivery = @mailgun.deliveries.sole
+    delivery = @transport.deliveries.sole
     assert_equal "dana@fieldworks.co", delivery[:to]
 
     mail = Mail.read_from_string(delivery[:mime])
@@ -88,14 +107,14 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
     message = Message.compose!(ticket: @ticket, agent: @agent, text: "On it.")
 
     with_mailgun_env do
-      assert_equal :delivered, Outbound::Delivery.deliver!(message, mailgun: @mailgun)
+      assert_equal :delivered, Outbound::Delivery.deliver!(message, transport: @transport)
       assert message.reload.delivered_at.present?
 
       # A job redelivered after its TTR, or a backfill racing a live send.
-      assert_equal :already_delivered, Outbound::Delivery.deliver!(message, mailgun: @mailgun)
+      assert_equal :already_delivered, Outbound::Delivery.deliver!(message, transport: @transport)
     end
 
-    assert_equal 1, @mailgun.deliveries.size
+    assert_equal 1, @transport.deliveries.size
   end
 
   test "a note can never be delivered" do
@@ -103,10 +122,10 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
 
     with_mailgun_env do
       assert_raises Outbound::Delivery::NotDeliverable do
-        Outbound::Delivery.deliver!(note, mailgun: @mailgun)
+        Outbound::Delivery.deliver!(note, transport: @transport)
       end
     end
-    assert_empty @mailgun.deliveries
+    assert_empty @transport.deliveries
   end
 
   test "delivering unconfigured raises rather than pretending" do
@@ -114,7 +133,7 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
 
     assert_not Outbound::Delivery.configured?
     assert_raises Outbound::Delivery::NotConfigured do
-      Outbound::Delivery.deliver!(message, mailgun: @mailgun)
+      Outbound::Delivery.deliver!(message, transport: @transport)
     end
     assert_nil message.reload.delivered_at
   end
@@ -136,7 +155,7 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
     assert_equal "outbound-#{message.id}", opts[:idp]
   end
 
-  test "compose! queues nothing for notes, and nothing at all when Mailgun is unconfigured" do
+  test "compose! queues nothing for notes, and nothing at all when no transport is configured" do
     never = ->(*, **) { flunk "nothing should reach the queue" }
 
     stubbing_tuber_put(never) do
@@ -165,5 +184,79 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
 
     assert message.persisted?
     assert_nil message.delivered_at
+  end
+
+  # --- SMTP transport -------------------------------------------------------
+
+  test "configured? is true under SMTP env, and SMTP takes precedence over Mailgun" do
+    with_smtp_env do
+      assert Outbound::Delivery.smtp_configured?
+      assert Outbound::Delivery.configured?
+
+      # When both are set, SMTP wins — the common case for an inbox provider
+      # relay. The picked transport is the SMTP one, not Mailgun.
+      with_env(MAILGUN_ENV) do
+        assert Outbound::Delivery.smtp_configured?
+        assert Outbound::Delivery.mailgun_configured?
+        assert_kind_of Outbound::Smtp, Outbound::Delivery.transport
+      end
+    end
+  end
+
+  test "SMTP env picks the SMTP transport and delivers via it" do
+    smtp = FakeTransport.new(name: "smtp")
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Via SMTP.")
+
+    with_smtp_env do
+      assert_kind_of Outbound::Smtp, Outbound::Delivery.transport
+      assert_equal :delivered, Outbound::Delivery.deliver!(message, transport: smtp)
+    end
+
+    assert message.reload.delivered_at.present?
+    assert_equal 1, smtp.deliveries.size
+    assert_equal "dana@fieldworks.co", smtp.deliveries.sole[:to]
+  end
+
+  test "a Rejected from any transport buries, not retries — the consumer's rescue is transport-agnostic" do
+    rejecting = Class.new do
+      def deliver_mime(to:, mime:)
+        raise Outbound::Smtp::Rejected, "SMTP refused: 550 no such user"
+      end
+    end.new
+
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Bad recipient.")
+
+    with_smtp_env do
+      assert_raises Outbound::Rejected do
+        Outbound::Delivery.deliver!(message, transport: rejecting)
+      end
+    end
+
+    # Rejected means no delivered_at — the consumer would bury this job.
+    assert_nil message.reload.delivered_at
+
+    # The base class catches both transport subclasses, so the consumer's
+    # `rescue Outbound::Rejected` is the single hook.
+    assert Outbound::Smtp::Rejected < Outbound::Rejected
+    assert Outbound::Http::Rejected < Outbound::Rejected
+  end
+
+  test "a transient SMTP error propagates uncaught for retry, not Rejected" do
+    transient = Class.new do
+      def deliver_mime(to:, mime:)
+        raise Net::SMTPServerBusy, "421 service unavailable"
+      end
+    end.new
+
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Retry me.")
+
+    with_smtp_env do
+      # Not Rejected — the consumer's generic rescue retries these.
+      assert_raises Net::SMTPServerBusy do
+        Outbound::Delivery.deliver!(message, transport: transient)
+      end
+    end
+
+    assert_nil message.reload.delivered_at
   end
 end

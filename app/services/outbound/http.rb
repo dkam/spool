@@ -26,8 +26,9 @@ module Outbound
     # sending domain, a recipient it refuses. Retrying the same request buys
     # nothing, so the consumer buries on this rather than cycling it. A 429 is
     # deliberately NOT one of these: rate limiting is the one 4xx that a
-    # released job outlives.
-    class Rejected < Error; end
+    # released job outlives. Subclasses Outbound::Rejected so the consumer's
+    # transport-agnostic rescue catches both.
+    class Rejected < Outbound::Rejected; end
 
     OPEN_TIMEOUT = 5
     READ_TIMEOUT = 30

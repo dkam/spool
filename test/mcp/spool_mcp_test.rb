@@ -137,7 +137,7 @@ class SpoolMcpTest < ActiveSupport::TestCase
     assert message.outbound?
     assert_equal @inbound.message_id, message.in_reply_to
     assert_equal "waiting", result[:state]
-    # Mailgun is never configured in test, and the tool says so out loud.
+    # No outbound transport is configured in test, and the tool says so out loud.
     assert_match(/not configured/, result[:delivery])
     assert_equal "pending", @open.reload.state
   end

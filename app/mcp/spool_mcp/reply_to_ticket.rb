@@ -4,8 +4,9 @@ module SpoolMcp
   class ReplyToTicket < MCP::Tool
     tool_name "reply_to_ticket"
     description "Send a reply to the customer on a ticket. The ticket moves to waiting. " \
-      "Delivery is asynchronous via Mailgun: the reply is stored and queued, and the response's " \
-      "delivery field says whether sending is configured in this environment. This emails a real customer."
+      "Delivery is asynchronous via the configured outbound transport (SMTP or Mailgun): " \
+      "the reply is stored and queued, and the response's delivery field says whether sending " \
+      "is configured in this environment. This emails a real customer."
     annotations(open_world_hint: false)
     input_schema(
       properties: {

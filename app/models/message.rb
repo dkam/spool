@@ -89,8 +89,8 @@ class Message < ApplicationRecord
   # from the message being replied to, and the JSON body envelope.
   #
   # The row is the source of truth and delivery is asynchronous: a reply is
-  # committed first, then queued for Outbound::Delivery. With Mailgun
-  # unconfigured the queueing is skipped and the row simply stays stored —
+  # committed first, then queued for Outbound::Delivery. With no transport
+  # configured the queueing is skipped and the row simply stays stored —
   # `bin/rails outbound:backfill` sends the accumulation once credentials
   # exist.
   def self.compose!(ticket:, agent:, text:, direction: "outbound", subject: nil)

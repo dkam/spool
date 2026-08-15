@@ -15,7 +15,7 @@ module Ingest
     # Raw RFC822 handed over by the IMAP poller, one job per message.
     INBOUND_TUBE = "spool.inbound"
 
-    # Outbound sends (Mailgun). Separated from inbound so a provider outage
+    # Outbound sends (SMTP or Mailgun). Separated from inbound so a provider outage
     # backing up sends can't stall ingestion.
     OUTBOUND_TUBE = "spool.outbound"
 

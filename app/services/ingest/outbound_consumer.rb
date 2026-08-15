@@ -38,10 +38,11 @@ module Ingest
         rescue
           nil
         end
-      rescue Outbound::Http::Rejected => e
-        # The provider looked at this exact request and refused it (bad key,
-        # unknown domain, refused recipient). The same bytes will be refused
-        # again, so bury — visibly, where tuber's stats show it.
+      rescue Outbound::Rejected => e
+        # The transport looked at this exact send and refused it (bad key,
+        # unknown domain, refused recipient, permanent SMTP failure). The same
+        # bytes will be refused again, so bury — visibly, where tuber's stats
+        # show it.
         log_exception("[OutboundConsumer] provider rejected send, burying", e)
         begin
           job.bury

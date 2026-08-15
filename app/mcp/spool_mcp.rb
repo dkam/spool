@@ -41,7 +41,7 @@ module SpoolMcp
         Start with list_tickets (defaults to open — the inbox), read a thread
         with get_ticket, and write with add_note, reply_to_ticket or
         update_ticket. reply_to_ticket emails a real customer (asynchronously,
-        via Mailgun) wherever delivery is configured — its response says
+        via the configured outbound transport) wherever delivery is configured — its response says
         whether the reply was queued or only stored.
 
         Tickets can carry tags (update_ticket's add_tags / remove_tags).
