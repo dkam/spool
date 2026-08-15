@@ -20,12 +20,6 @@ export default class extends Controller {
   }
 
   schedule() {
-    // Only where a frame can absorb the result. Off the inbox the form targets
-    // _top, and a full navigation per keystroke would replace <body> and throw
-    // the caret away mid-word — so there, Enter submits and nothing types
-    // ahead. See ApplicationHelper#search_frame_target.
-    if (this.element.dataset.turboFrame === "_top") return
-
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.element.requestSubmit(), this.constructor.delay)
   }

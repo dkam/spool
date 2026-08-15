@@ -22,6 +22,31 @@
     </span>
   </div>
 
+  <%# Search narrows this list in place, so it lives here rather than in the
+      header: the moment "/" is pressed only means something on a screen that
+      has a list to narrow, and results always land here — search is a `?q=`
+      narrowing of this list, not a screen of its own. Submitting into the
+      ticket_list frame below is what makes search-as-you-type possible: the
+      frame swaps and the caret stays put. See search_controller.js. %>
+  <%= form_with url: tickets_path, method: :get, class: "flex items-baseline gap-5 mt-6 pb-3 border-b border-rule",
+        data: {
+          controller: "search",
+          turbo_frame: "ticket_list",
+          action: "input->search#schedule keydown.esc->search#clear"
+        } do |form| %>
+    <%# The filters are the list's other narrowing and must survive a search;
+        without these, typing in the box would silently drop them. %>
+    <%= form.hidden_field :state, value: @state_param, id: nil if @state_param %>
+    <%= form.hidden_field :assignee, value: @assignee_filter, id: nil if @assignee_filter %>
+
+    <%= form.search_field :q, value: @query, placeholder: "Search subject, message, address",
+          autocomplete: "off",
+          data: { search_target: "field", shortcuts_target: "search" },
+          class: "flex-1 min-w-0 bg-transparent border-0 outline-none p-0 text-base
+                  text-ink placeholder:text-faint" %>
+    <span class="font-mono text-2xs text-faint"><%= @query.present? ? "esc to clear" : "/" %></span>
+  <% end %>
+
   <%# Filters and rows share a frame so a filter click swaps both the list and
       the chips' own active state in one request. turbo-action="advance" keeps
       the address bar in step, so a filtered inbox stays linkable and the back
