@@ -257,14 +257,18 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_not @ticket.reload.unread_for?(agent)
   end
 
-  test "the thread distinguishes a note from a sent reply" do
-    Message.compose!(ticket: @ticket, agent: agent, text: "Told the customer.")
+  test "the thread distinguishes a note from a sent reply, and queued from delivered" do
+    delivered = Message.compose!(ticket: @ticket, agent: agent, text: "Told the customer.")
+    delivered.update!(delivered_at: Time.current)
+    Message.compose!(ticket: @ticket, agent: agent, text: "Not sent yet.")
     Message.compose!(ticket: @ticket, agent: agent, text: "Same as #1031.", direction: "note")
 
     get ticket_path(@ticket)
 
     assert_response :success
     assert_match "Sent to customer", response.body
+    # An outbound row Mailgun hasn't accepted yet says so, rather than lying.
+    assert_match "Queued · not yet delivered", response.body
     assert_match "Internal note · not sent to the customer", response.body
   end
 

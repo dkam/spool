@@ -73,6 +73,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_000003) do
     t.integer "body_dictionary_id"
     t.text "body_excerpt"
     t.datetime "created_at", null: false
+    t.datetime "delivered_at"
     t.string "direction", null: false
     t.string "from_email"
     t.string "from_name"

@@ -15,6 +15,7 @@ recorded here, change the document in the same commit.
 | --- | --- |
 | [architecture.md](architecture.md) | Stack, storage model, database configuration, what's deliberately absent |
 | [ingest.md](ingest.md) | Inbound mail: rejection, threading, MIME splitting, idempotency |
+| [outbound.md](outbound.md) | Outbound mail: Mailgun, the delivery queue, delivered_at, backfill |
 | [compression.md](compression.md) | zstd layer, dictionaries, when and how to train them |
 | [queue.md](queue.md) | Tuber, consumers, the scheduler, the Active Job adapter |
 | [auth.md](auth.md) | OIDC, the allowlist, the three configuration states |

@@ -204,9 +204,11 @@ breaks something invisible if it's wrong:
 Subject defaults to `ticket.tagged_subject`, so the `[#id]` threading fallback is
 present.
 
-**Delivery does not exist yet** (milestone 5). The row is complete and correct;
-nothing sends it. When sending lands it hooks onto this same method, so calling
-code won't change.
+**Delivery is asynchronous.** `compose!` commits the row, then queues it on
+`spool.outbound` for `Outbound::Delivery` (a no-op when Mailgun isn't
+configured — the row simply stays stored). `messages.delivered_at` is stamped
+once Mailgun accepts the send, and is what the thread's "Sent to customer" /
+"Queued · not yet delivered" label reads. See [outbound.md](outbound.md).
 
 ## Writing from a GET
 

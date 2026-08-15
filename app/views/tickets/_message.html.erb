@@ -36,8 +36,12 @@
       <span class="text-2xs uppercase tracking-[0.09em] text-faint">
         Internal note · not sent to the customer
       </span>
-    <% else %>
+    <% elsif message.delivered_at %>
       <span class="text-2xs uppercase tracking-[0.09em] text-faint">Sent to customer</span>
+    <% else %>
+      <%# Honest until Mailgun confirms: the row exists, the email hasn't
+          left yet (or delivery isn't configured). %>
+      <span class="text-2xs uppercase tracking-[0.09em] text-faint">Queued · not yet delivered</span>
     <% end %>
 
     <time class="ml-auto text-xs <%= accent ? "text-ink" : "text-faint" %>"

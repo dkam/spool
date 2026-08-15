@@ -48,6 +48,7 @@ env:
   secret:
     - RAILS_MASTER_KEY
     - OIDC_CLIENT_SECRET
+    - MAILGUN_API_KEY
   clear:
     # Host authority for absolute URLs — a hostname or "host:port", never a URI.
     SPOOL_HOST: spool.example.com
@@ -58,6 +59,13 @@ env:
     # Domain used in generated Message-IDs. Defaults to SPOOL_HOST's domain;
     # set it when the two differ.
     # SPOOL_MESSAGE_ID_DOMAIN: example.com
+
+    # The Mailgun sending domain (a subdomain, so the apex's SPF and MX stay
+    # with Fastmail). The API key is in the `secret:` list above; unset both
+    # and replies are stored but nothing sends. See .env.example.
+    MAILGUN_DOMAIN: mg.example.com
+    # Only for accounts in Mailgun's EU region.
+    # MAILGUN_API_BASE: https://api.eu.mailgun.net
 
     # The tuber accessory, reachable by container name on the Kamal network.
     TUBER_URL: spool-tuber:11300

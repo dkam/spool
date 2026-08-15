@@ -76,15 +76,20 @@ See [ui.md](ui.md) for the screens and [ui-contract.md](ui-contract.md) for the
 model API.
 
 ### Milestone 5 — outbound via Mailgun
-- [ ] Mailgun on a subdomain (`mg.yourdomain.com`), so SPF and MX for the apex
-      stay with Fastmail untouched
-- [ ] `From:` stays `support@yourdomain.com` so replies land back in Fastmail
+- [x] Mailgun on a subdomain (`mg.yourdomain.com`), so SPF and MX for the apex
+      stay with Fastmail untouched — see [outbound.md](outbound.md)
+- [x] `From:` stays `support@yourdomain.com` so replies land back in Fastmail
       and the poller picks them up
-- [ ] Set `Message-ID`, `In-Reply-To` and `References` correctly on every send —
-      `Message#reply_references` builds the chain
-- [ ] Persist the outbound message with the same split/compress treatment
-- [ ] Sending flips the ticket to `pending` (`record_outbound_activity!`)
-- [ ] `spool.outbound` tube + consumer
+- [x] Set `Message-ID`, `In-Reply-To` and `References` correctly on every send —
+      the stored row goes over the wire verbatim via Mailgun's `.mime` endpoint,
+      so the provider can't substitute its own ids
+- [x] Persist the outbound message with the same split/compress treatment
+      (was already true: delivery reads the row `compose!` stores)
+- [x] Sending flips the ticket to `pending` (`record_outbound_activity!`)
+- [x] `spool.outbound` tube + consumer, `delivered_at` stamp for idempotency
+- [ ] Set up the Mailgun account/subdomain and set `MAILGUN_API_KEY` /
+      `MAILGUN_DOMAIN`, then `bin/rails outbound:backfill` to send the
+      replies stored before delivery existed
 
 ### Milestone 6 — dictionary training
 - [ ] `Compression::DictTrainingJob` — shell out to `zstd --train`
@@ -116,9 +121,10 @@ are cheap to add once the backing exists — see [ui.md](ui.md).
   with inbound mail clearing it (the same reopening logic as
   `record_inbound_activity!`). The list header has a slot waiting.
 
-- **Attachments on outbound mail.** Needs an upload path and a delivery path,
-  neither of which exists — attachments are currently inbound-only, and nothing
-  sends yet. Sequence it after milestone 5.
+- **Attachments on outbound mail.** Needs an upload path (which doesn't
+  exist — attachments are currently inbound-only) and for `compose!` /
+  `Outbound::Delivery.mime_for` to learn multipart bodies. Delivery itself now
+  exists, so this is unblocked.
 
 ## Open decisions
 
@@ -130,8 +136,9 @@ are cheap to add once the backing exists — see [ui.md](ui.md).
 - **Nothing has been deployed yet.** `config/deploy.yml` now describes the real
   thing — three roles, the storage volume, tuber with persistence on, the OIDC
   environment — but every host and hostname in it is a placeholder and no first
-  deploy has been run against a server. The Mailgun secrets arrive with
-  milestone 5.
+  deploy has been run against a server. The Mailgun secrets
+  (`MAILGUN_API_KEY`, `MAILGUN_DOMAIN`) are named in it but the Mailgun
+  account and subdomain DNS have not been set up.
 
 ## Deviations from the build specification
 

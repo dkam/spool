@@ -11,7 +11,7 @@ module Ingest
   module Worker
     ROLES = {
       # Latency-sensitive: mail in, mail out.
-      "mail" => -> { [InboundConsumer.new, ActiveJobConsumer.new] },
+      "mail" => -> { [InboundConsumer.new, OutboundConsumer.new, ActiveJobConsumer.new] },
 
       # Background work from config/schedule.yml.
       "maintenance" => -> { [DispatchConsumer.new(tube: Tuber::MAINTENANCE_TUBE)] },
@@ -19,7 +19,7 @@ module Ingest
       # Everything in one process. Fine for development and for a small
       # single-VPS deploy.
       "all" => -> {
-        [InboundConsumer.new, ActiveJobConsumer.new,
+        [InboundConsumer.new, OutboundConsumer.new, ActiveJobConsumer.new,
           DispatchConsumer.new(tube: Tuber::MAINTENANCE_TUBE)]
       }
     }.freeze

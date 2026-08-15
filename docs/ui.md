@@ -156,7 +156,7 @@ didn't, and what was done instead.
 | Nav: Tickets / Ticket / Customer | The design's nav switched canvas screens. Ticket and customer are drill-downs here, so the nav carries only Tickets. |
 | Ticket header "Assign" | A native select — the design had nowhere to put the list of agents. Styled down to read as the text button beside it; auto-submits. |
 | Ticket header "Snooze" | **Not built.** Nothing in the schema backs it, and a control that silently does nothing is worse than an absent one. The header has a slot waiting; what it needs is in [todo.md](todo.md#designed-but-not-built). |
-| Composer "Attach" | **Not built.** Outbound attachments need an upload path *and* a delivery path, and nothing delivers outbound mail yet (milestone 5) — so an attachment could not go anywhere. |
+| Composer "Attach" | **Not built.** Outbound attachments need an upload path, and the delivery MIME (`Outbound::Delivery.mime_for`) is text-only — so an attachment could not go anywhere yet. |
 
 Both omissions are the design being ahead of the schema, not oversights, and
 both should land when the feature behind them does.

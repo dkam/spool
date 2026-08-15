@@ -32,7 +32,7 @@ Ingest::Tuber::NotFoundError`, from the error path, in production.
 | Tube | Producer | Consumer |
 | --- | --- | --- |
 | `spool.inbound` | `Jmap::Poller` | `Ingest::InboundConsumer` |
-| `spool.outbound` | compose action (milestone 5) | not built yet |
+| `spool.outbound` | `Message.compose!` / `outbound:backfill` | `Ingest::OutboundConsumer` |
 | `spool.activejob` | `ActiveJob::QueueAdapters::TuberAdapter` | `Ingest::ActiveJobConsumer` |
 | `spool.maintenance` | `bin/scheduler` | `Ingest::DispatchConsumer` |
 

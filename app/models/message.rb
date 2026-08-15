@@ -84,12 +84,15 @@ class Message < ApplicationRecord
   end
 
   # The compose path: an agent's reply or internal note. The one place outbound
-  # messages and notes are created, so that the things a later delivery step
-  # depends on can't be forgotten — a Spool-issued Message-ID, the threading
-  # headers built from the message being replied to, and the JSON body envelope.
+  # messages and notes are created, so that the things delivery depends on
+  # can't be forgotten — a Spool-issued Message-ID, the threading headers built
+  # from the message being replied to, and the JSON body envelope.
   #
-  # Delivery is milestone 5 and does not exist yet. This creates a complete,
-  # correct row; sending it is the missing piece, not the shape of it.
+  # The row is the source of truth and delivery is asynchronous: a reply is
+  # committed first, then queued for Outbound::Delivery. With Mailgun
+  # unconfigured the queueing is skipped and the row simply stays stored —
+  # `bin/rails outbound:backfill` sends the accumulation once credentials
+  # exist.
   def self.compose!(ticket:, agent:, text:, direction: "outbound", subject: nil)
     raise ArgumentError, "direction must be outbound or note" unless
       %w[outbound note].include?(direction)
@@ -98,8 +101,8 @@ class Message < ApplicationRecord
     document = JSON.generate({"text" => text, "html" => nil})
     sent_at = Time.current
 
-    ApplicationRecord.transaction do
-      message = create!(
+    message = ApplicationRecord.transaction do
+      created = create!(
         ticket: ticket,
         agent: agent,
         direction: direction,
@@ -123,8 +126,14 @@ class Message < ApplicationRecord
         ticket.update!(last_activity_at: sent_at)
       end
 
-      message
+      created
     end
+
+    # After the commit, never inside it: a queued send racing an uncommitted
+    # row would find nothing to deliver.
+    Outbound::Delivery.enqueue(message)
+
+    message
   end
 
   # Message-IDs Spool issues. The domain must be one Spool controls, because

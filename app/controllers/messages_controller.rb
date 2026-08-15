@@ -1,9 +1,9 @@
 class MessagesController < ApplicationController
-  # Composing writes a row; nothing delivers it yet (milestone 5 — see
-  # docs/architecture.md). The thread and the ticket state are correct the
-  # moment an agent hits send, so delivery is the one piece still missing rather
-  # than the whole path being stubbed. When it lands it hooks onto compose!, and
-  # this action does not change.
+  # Composing writes the row and queues the send — compose! owns both, so this
+  # action stays a thin translation of form params. The thread and the ticket
+  # state are correct the moment an agent hits send; delivery happens
+  # asynchronously off spool.outbound (see docs/outbound.md), and the thread
+  # shows "Queued · not yet delivered" until Mailgun accepts it.
   def create
     @ticket = Ticket.find(params[:ticket_id])
     text = params[:body].to_s.strip

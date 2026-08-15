@@ -72,7 +72,7 @@ exist yet.
 | Auth — OIDC, allowlist, sessions | done |
 | UI — ticket list, thread, customer, search | done |
 | Inbound — JMAP poller (Fastmail), folder-as-queue | done |
-| **Outbound send** — nothing takes mail *out* yet | not built |
+| Outbound send — Mailgun API, async delivery via queue | done |
 | Dictionary training, templates CRUD, pagination | not built |
 
 `Ingest::Inbound.ingest(raw)` is the single entry point for inbound mail, so the
