@@ -59,7 +59,7 @@ gem "openid_connect"
 gem "jwt"
 
 # Pagination for the ticket list.
-gem "pagy", "~> 43.0"
+gem "pagy", "~> 43.6"
 
 # Model Context Protocol server (official Ruby SDK), so agents can drive Spool
 # through typed tools instead of scraping the UI. Served over stdio by bin/mcp;
