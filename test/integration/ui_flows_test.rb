@@ -424,6 +424,28 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # /login is unauthenticated, so whatever a crawler puts in its Accept header
+  # reaches the renderer. Asking for JSON used to be a 500 -- MissingTemplate for
+  # login/index in the :json format (Splat #813). There is one login screen and
+  # it is a page; the format asked for doesn't change that.
+  test "the login screen is a page whatever format is asked for" do
+    with_env(OIDC) do
+      get login_path(format: :json)
+
+      assert_response :success
+      assert_select "a[href=?]", "/login/start"
+    end
+  end
+
+  test "the login screen ignores an Accept header it has nothing to say in" do
+    with_env(OIDC) do
+      get login_path, headers: {"Accept" => "application/json"}
+
+      assert_response :success
+      assert_select "a[href=?]", "/login/start"
+    end
+  end
+
   # Open mode has no session at all, so `authenticated?` is false on a wholly
   # usable app. Gating the header on that instead of on current_agent would
   # take the nav and the search away from every development instance.

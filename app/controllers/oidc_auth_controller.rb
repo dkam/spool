@@ -26,7 +26,11 @@ class OidcAuthController < ApplicationController
     # not — it's the documented development default, so it renders 200 and
     # explains itself rather than looking broken.
     status = SpoolAuthorization.oidc_misconfigured? ? :service_unavailable : :ok
-    render "login/index", status: status
+    # /login is unauthenticated, so whatever a crawler puts in its Accept header
+    # -- or on the end of the path -- reaches the renderer. There is one login
+    # screen and it is a page; without pinning the format, a request for JSON
+    # was MissingTemplate and a 500 (Splat #813).
+    render "login/index", formats: [:html], status: status
   end
 
   # GET /login/start
