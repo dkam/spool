@@ -35,7 +35,7 @@ gem "solid_cable"
 #
 # Note `::Tuber` is the gem and `Ingest::Tuber` is Spool's wrapper. See
 # docs/queue.md before writing either.
-gem "tuber", "~> 0.5"
+gem "tuber", "~> 0.6"
 
 # Drives the recurring scheduler (config/schedule.yml → tuber).
 gem "rufus-scheduler", "~> 3.9"
