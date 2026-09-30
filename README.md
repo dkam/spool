@@ -22,7 +22,7 @@ live in the same file as the rows.
 Deliberately absent: Postgres, Redis, Sidekiq, Solid Queue, Active Storage,
 Action Mailbox, Action Text, Devise.
 
-The rest of the stack is Rails 8.1 on Ruby 4.0.6, Tailwind and Hotwire with no
+The rest of the stack is Rails 8.1 on Ruby 4.0.7, Tailwind and Hotwire with no
 SPA and no build step beyond Tailwind's watcher, and
 [tuber](https://github.com/tuberq/tuber-rs) — a beanstalkd-compatible queue in
 a single Rust binary — for jobs.
@@ -82,7 +82,7 @@ out.
 
 ## Running it locally
 
-Ruby 4.0.6 and Docker (which is only used to run tuber; `brew install
+Ruby 4.0.7 and Docker (which is only used to run tuber; `brew install
 tuberq/tuber/tuber` works instead — see `Procfile.dev`).
 
 ```bash

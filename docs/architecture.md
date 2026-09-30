@@ -2,7 +2,7 @@
 
 ## Stack
 
-- Rails 8.1, Ruby 4.0.6 (matching `splat`)
+- Rails 8.1, Ruby 4.0.7 (the same 4.0 series as `splat`)
 - SQLite — WAL, single primary file, reader/writer connection split
 - [Tuber](https://github.com/tuberq/tuber-rs) for the job queue (beanstalkd-compatible, single Rust binary)
 - Solid Cache + Solid Cable, each in its own SQLite file
