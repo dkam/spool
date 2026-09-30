@@ -92,6 +92,10 @@ handled here, and each piece is load-bearing:
 `Ingest::InboundConsumer` additionally buries immediately on a malformed job
 body: a body that won't parse will never parse, so five retries buy nothing.
 
+`Ingest::DispatchConsumer` never buries and never retries: a failed scheduled
+job is logged, reported, and deleted, because the next tick of the schedule is
+the retry. See `idp:` below for why burying one is worse than useless.
+
 ## Active Job
 
 `config.active_job.queue_adapter = :tuber` resolves to
@@ -114,10 +118,14 @@ negotiate.
 
 Per-entry options:
 
-- **`idp:`** — tuber idempotency key. While a job with that key is in the tube
-  (ready or reserved), further puts with it are suppressed. Use on anything that
-  can run longer than its own interval; it's what stops a slow JMAP poll from
-  stacking a second poller behind the first.
+- **`idp:`** — tuber idempotency key. Until the job holding that key is
+  *deleted*, further puts with it are suppressed — whether the job is ready,
+  reserved, delayed or **buried**. Use on anything that can run longer than its
+  own interval; it's what stops a slow JMAP poll from stacking a second poller
+  behind the first. The buried case is the trap: a buried `jmap_poll` held its
+  key for six weeks, every put the scheduler logged as "firing" was absorbed by
+  the dead job, and inbound mail stopped. That is why `DispatchConsumer`
+  deletes failed jobs rather than burying them.
 - **`con:`** — tuber concurrency key. Caps simultaneous reserves across all
   consumers for jobs sharing the key.
 

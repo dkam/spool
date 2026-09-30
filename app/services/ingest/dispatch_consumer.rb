@@ -7,6 +7,14 @@ module Ingest
   #
   # These are plain classes, not ActiveJob subclasses — the scheduler names them
   # by string and there's no serialisation to negotiate.
+  #
+  # A failed job is deleted, not retried and never buried. The schedule is the
+  # retry: the next tick runs the same job with the same (empty) arguments, so a
+  # release buys nothing. Burying is actively harmful. Tuber keeps a buried
+  # job's `idp:` key live, so every later put with that key is suppressed as a
+  # duplicate of the dead job. That is how one Fastmail outage buried
+  # Jmap::PollJob and stopped inbound mail for six weeks while the scheduler
+  # kept logging that it was firing it.
   class DispatchConsumer < TubeConsumer
     def initialize(tube:, batch_size: 5)
       super
@@ -27,7 +35,8 @@ module Ingest
         nil
       rescue => e
         log_exception("[DispatchConsumer] #{klass_name || "?"} failed", e)
-        safe_finalize(job, :retry)
+        # Deleted like a success; the next tick is the retry. See above.
+        safe_finalize(job, :ok)
       end
     end
   end
