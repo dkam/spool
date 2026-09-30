@@ -126,12 +126,32 @@ module Ingest
       source = split.text.presence || html_to_text(split.html)
       return nil if source.blank?
 
-      EmailReplyParser.parse_reply(source).to_s.strip.presence || source.strip.truncate(2000)
+      visible_reply(source).strip.presence || source.strip.truncate(2000)
     rescue => e
       # A parser that chokes on an odd quoting style must not cost us the
       # message. Fall back to the leading text.
       Rails.logger.warn "[Ingest] excerpt failed (#{e.class}): falling back to truncated body"
       source.to_s.strip.truncate(2000).presence
+    end
+
+    # A line that is nothing but dashes: a divider.
+    DIVIDER = /\A\s*-{3,}\s*\z/
+
+    # EmailReplyParser.parse_reply, except that a divider doesn't start a
+    # signature. The parser takes any line beginning "--" for a signature
+    # delimiter and hides it and everything under it, and form mail puts what
+    # the customer actually typed between two rows of dashes — Booko's issue
+    # reports lost the issue itself that way. The real delimiters ("-- ", "--")
+    # and Outlook's "-----Original Message-----" still end the reply.
+    #
+    # The parser only ever hides a run of fragments at the end, so the reply is
+    # the fragments up to the first hidden one that isn't a divider.
+    def visible_reply(source)
+      fragments = EmailReplyParser.read(source).fragments
+      shown = fragments.take_while do |fragment|
+        !fragment.hidden? || (fragment.signature? && fragment.to_s.lines.first.to_s.match?(DIVIDER))
+      end
+      shown.join("\n").rstrip
     end
 
     # Deliberately crude: this exists only so an HTML-only message still has

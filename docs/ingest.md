@@ -128,8 +128,22 @@ displaying a customer's email.
 
 ## `body_excerpt`
 
-`EmailReplyParser.parse_reply` strips the quoted history. This is what the
-ticket list shows and what FTS5 indexes.
+`EmailReplyParser` strips the quoted history. This is what the thread shows
+above "Show quoted text", what the ticket list previews, and what FTS5 indexes.
+
+One exception to the gem's rules: it takes any line starting `--` for a
+signature delimiter and hides everything below it, and a row of dashes is a
+divider, not a signature. Form mail puts what the customer typed between two of
+them — Booko's issue reports lost the issue itself this way. So a line of three
+or more dashes and nothing else doesn't end the reply; `-- `, `--` and
+Outlook's `-----Original Message-----` still do.
+
+The excerpt is computed at ingest and stored. When the rule changes, recompute
+the stored ones from their full bodies (search re-indexes through its trigger):
+
+```console
+$ bin/rails messages:reexcerpt
+```
 
 The **full body is kept intact** in `body_blob`. Do not "optimise" this by
 storing only the stripped reply: customers top-post inside quoted text, and you

@@ -277,6 +277,32 @@ class Ingest::InboundTest < ActiveSupport::TestCase
     assert_includes message.body_text, "Could you confirm the purchase date"
   end
 
+  # The parser takes any line starting "--" for a signature and hides it and
+  # everything below. A row of dashes is a divider, and form mail puts what
+  # the customer actually typed between two of them.
+  test "a line of dashes is a divider, not a signature" do
+    message = ingest(:dashed_dividers).message.reload
+
+    assert_includes message.body_excerpt, "has created an issue for"
+    assert_includes message.body_excerpt, "Image of DVD is missing"
+  end
+
+  test "a signature after the \"-- \" delimiter is still stripped" do
+    message = ingest(:signed).message.reload
+
+    assert_includes message.body_excerpt, "Could you check on it?"
+    refute_includes message.body_excerpt, "Rear Admiral"
+  end
+
+  # Outlook quotes without ">" markers; this header line is all that marks
+  # where the history starts. It begins with dashes but it isn't a divider.
+  test "an Outlook -----Original Message----- header still starts the quote" do
+    message = ingest(:outlook_original_message).message.reload
+
+    assert_includes message.body_excerpt, "it turned up this morning"
+    refute_includes message.body_excerpt, "left the warehouse"
+  end
+
   test "raw_size records the uncompressed size of what the blobs hold" do
     message = ingest(:new_ticket).message.reload
 

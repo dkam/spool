@@ -1,0 +1,17 @@
+Return-Path: <bounce@mg.shop.example>
+Message-ID: <6abc7d4ab3f2a_2890@shop.example>
+Date: Wed, 30 Sep 2026 13:08:44 +1000
+From: Shop <admin@mg.shop.example>
+Reply-To: grace@example.com
+To: Support <support@spool.test>
+Subject: Reported Issue for 9324915082021
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+A User ( grace@example.com ) has created an issue for https://shop.example/9324915082021/ - Spongebob Squarepants: Spongicus
+
+----
+Image of DVD is missing
+----
+113.197.13.151 / Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0
