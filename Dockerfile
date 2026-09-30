@@ -104,3 +104,12 @@ ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 # See docs/queue.md for what each role consumes.
 EXPOSE 80
 CMD ["./bin/thrust", "./bin/rails", "server"]
+
+# Label the image with its release and commit, so `docker inspect` on a host
+# says what is running. Both ARGs are declared again here because an ARG only
+# reaches the stage that declares it, and they come last because a new value
+# invalidates the cache of every layer after it.
+ARG VERSION=unknown
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$GIT_SHA

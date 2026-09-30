@@ -27,7 +27,7 @@ if ! git diff-index --quiet HEAD --; then
   echo "warning: working tree is dirty — GIT_SHA=${GIT_SHA:0:12} won't describe this image" >&2
 fi
 
-args=(--build-arg "GIT_SHA=$GIT_SHA" --tag "$IMAGE:v$VERSION" --tag "$IMAGE:dev")
+args=(--build-arg "GIT_SHA=$GIT_SHA" --build-arg "VERSION=$VERSION" --tag "$IMAGE:v$VERSION" --tag "$IMAGE:dev")
 [ -n "$PLATFORM" ] && args+=(--platform "$PLATFORM")
 
 echo "Building $IMAGE:v$VERSION (${GIT_SHA:0:12})"
