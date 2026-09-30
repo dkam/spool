@@ -23,7 +23,7 @@ module Ingest
         body = JSON.parse(job.body)
         raw = Base64.decode64(body.fetch("raw"))
 
-        result = Ingest::Inbound.ingest(raw, source: body["source"])
+        result = Ingest::Inbound.ingest(raw, source: body["source"], received_at: body["received_at"])
         Rails.logger.info "[InboundConsumer] #{result.outcome}#{" ticket=#{result.ticket.id}" if result.ticket}"
 
         job.delete
@@ -31,18 +31,32 @@ module Ingest
         # Reservation already expired and someone else took it.
         nil
       rescue JSON::ParserError, KeyError => e
-        # A malformed body will never parse, so retrying is pointless — bury it
-        # for inspection rather than cycling it for the next five attempts.
-        log_exception("[InboundConsumer] unprocessable job body, burying", e)
-        begin
-          job.bury
-        rescue
-          nil
-        end
+        # A malformed body will never parse, so retrying is pointless.
+        log_exception("[InboundConsumer] unprocessable job body", e)
+        safe_finalize(job, :give_up, e)
       rescue => e
         log_exception("[InboundConsumer] ingest failed", e)
-        safe_finalize(job, :retry)
+        safe_finalize(job, :retry, e)
       end
+    end
+
+    # The mail is still in the mailbox; this is the note of what to look for
+    # and where to rewind the poller to (`bin/rails jmap:rewind`). Whatever the
+    # body still yields goes in — for a body that won't parse, only the reason.
+    def gave_up(job, error)
+      body = begin
+        JSON.parse(job.body)
+      rescue JSON::ParserError
+        {}
+      end
+
+      DroppedMail.record!(
+        kind: "failed",
+        reason: "#{error.class}: #{error.message}",
+        raw: body["raw"] && Base64.decode64(body["raw"]),
+        source: body["source"],
+        received_at: body["received_at"]
+      )
     end
   end
 end

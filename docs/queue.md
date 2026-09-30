@@ -84,17 +84,23 @@ handled here, and each piece is load-bearing:
   jobs are re-reserved after their TTR. On boot it waits for tuber indefinitely
   rather than crashing — a worker with no live queue has nothing to do but wait.
 
-- **Bury after `MAX_RETRIES`.** A poison-pill message would otherwise cycle
-  forever. A buried job is visible in tuber's stats and can be kicked back once
-  the bug is fixed, which is the point — silently dropping a customer's email is
-  worse than leaving it buried.
+- **Give up after `MAX_RETRIES` — and never bury.** A poison-pill message
+  would otherwise cycle forever, so after five retries the consumer reports the
+  job to Sentry and deletes it. A failure no retry will change (a body that
+  won't parse, a send the transport refused) is given up on straight away.
 
-`Ingest::InboundConsumer` additionally buries immediately on a malformed job
-body: a body that won't parse will never parse, so five retries buy nothing.
+  Deleting rather than burying is deliberate. A buried job is visible only to
+  someone who asks tuber, and it keeps its `idp:` key live — see `idp:` below
+  for the six weeks that cost. Nothing is lost by deleting, because every job
+  here points at something that outlives it, and each consumer records what to
+  recover in a place the header reads (see `MailHealth`):
 
-`Ingest::DispatchConsumer` never buries and never retries: a failed scheduled
-job is logged, reported, and deleted, because the next tick of the schedule is
-the retry. See `idp:` below for why burying one is worse than useless.
+  | Consumer | Given up on, the thing survives as | Recovered by |
+  | --- | --- | --- |
+  | `InboundConsumer` | the mail in the mailbox, plus a `DroppedMail` row (`kind: "failed"`) with its Message-ID and receivedAt | `bin/rails jmap:rewind` |
+  | `OutboundConsumer` | the reply, a `Message` with no `delivered_at` | `bin/rails outbound:backfill` |
+  | `DispatchConsumer` | the schedule, which runs it again next tick | nothing — it doesn't retry either |
+  | `ActiveJobConsumer` | nothing; report only | — |
 
 ## Active Job
 

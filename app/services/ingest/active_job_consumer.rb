@@ -19,7 +19,7 @@ module Ingest
         nil
       rescue => e
         log_exception("[ActiveJobConsumer] job failed", e)
-        safe_finalize(job, :retry)
+        safe_finalize(job, :retry, e)
       end
     end
   end

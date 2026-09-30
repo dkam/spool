@@ -149,6 +149,36 @@ class Ingest::InboundTest < ActiveSupport::TestCase
     end
   end
 
+  # A rejection stores nothing, so without this row the only trace of it is a
+  # log line — and "why isn't this email in Spool?" has no answer.
+  test "a rejection is recorded, with where the mailbox says it arrived" do
+    Ingest::Inbound.ingest(raw(:bulk_precedence), source: "jmap", received_at: "2026-08-10T22:00:03Z")
+
+    dropped = DroppedMail.rejected.sole
+    assert_equal "precedence: bulk", dropped.reason
+    assert_equal "<newsletter-2026-08@vendor.test>", dropped.message_id
+    assert_equal "newsletter@vendor.test", dropped.from_email
+    assert_equal "Your August printer supplies newsletter", dropped.subject
+    assert_equal Time.iso8601("2026-08-10T22:00:03Z"), dropped.received_at
+  end
+
+  test "a message rejected twice is recorded once" do
+    2.times { ingest(:bulk_precedence) }
+
+    assert_equal 1, DroppedMail.count
+  end
+
+  # The recovery path for a failure: rewind the poller, the message comes
+  # through again, and the record of it having gone missing goes away.
+  test "storing a message clears the record of it having been dropped" do
+    DroppedMail.record!(kind: "failed", reason: "ActiveRecord::StatementTimeout: database is locked",
+      raw: raw(:new_ticket))
+
+    ingest(:new_ticket)
+
+    assert_empty DroppedMail.all
+  end
+
   test "rejects Spool's own outbound message echoed back" do
     ticket = ingest(:new_ticket).ticket
     outbound_reply(ticket, "<spool-outbound-0001@spool.test>")

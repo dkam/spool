@@ -30,7 +30,7 @@ module SpoolMcp
     MCP::Server.new(
       name: "spool",
       version: Spool::VERSION,
-      tools: [ListTickets, GetTicket, AddNote, ReplyToTicket, UpdateTicket],
+      tools: [ListTickets, GetTicket, AddNote, ReplyToTicket, UpdateTicket, MailStatus],
       instructions: <<~TEXT
         Spool is a small email helpdesk. Tickets belong to customers and hold a
         chronological thread of messages: "inbound" from the customer,
@@ -49,6 +49,11 @@ module SpoolMcp
         their future mail is tagged spam on arrival, and removing it
         unblocks them. Spam-tagged tickets are hidden from every list
         unless you ask with list_tickets' tag parameter.
+
+        When mail seems to be missing — "why isn't this email in Spool?" —
+        call mail_status. It says whether the mailbox is being polled, how far
+        it has read, and lists mail that arrived but was turned away (bulk,
+        auto-replies, lists) or given up on, plus replies not yet delivered.
       TEXT
     )
   end

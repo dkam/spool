@@ -44,6 +44,19 @@ class Jmap::PollJobTest < ActiveSupport::TestCase
     end
   end
 
+  # A message that can't be downloaded holds the cursor on every later poll, so
+  # nothing behind it arrives either. The poll returns normally; mail has still
+  # stopped.
+  test "a poll that couldn't deliver every message does not check in" do
+    with_sentry_configured do
+      with_env("SPOOL_JMAP_TOKEN" => "t") do
+        with_poller(-> { Jmap::Poller::Result.new(3, 1) }) { Jmap::PollJob.new.perform }
+      end
+
+      assert_empty check_ins
+    end
+  end
+
   # Checking in without polling would tell Splat mail is flowing when nothing is
   # reading the mailbox at all.
   test "no token, no check-in" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_30_000002) do
   create_table "agents", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -51,7 +51,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_000003) do
     t.index ["kind", "version"], name: "index_dictionaries_on_kind_and_version", unique: true
   end
 
+  create_table "dropped_mails", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "from_email"
+    t.string "kind", null: false
+    t.string "message_id"
+    t.string "reason", null: false
+    t.datetime "received_at"
+    t.string "source"
+    t.string "subject"
+    t.datetime "updated_at", null: false
+    t.index ["kind", "updated_at"], name: "index_dropped_mails_on_kind_and_updated_at"
+    t.index ["message_id"], name: "index_dropped_mails_on_message_id", unique: true
+  end
+
   create_table "ingest_cursors", force: :cascade do |t|
+    t.datetime "polled_at"
     t.text "position", null: false
     t.string "source", null: false
     t.datetime "updated_at", null: false

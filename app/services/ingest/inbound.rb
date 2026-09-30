@@ -22,11 +22,16 @@ module Ingest
 
     module_function
 
-    def ingest(raw, source: nil)
+    # `received_at` is when the mailbox says the message arrived (JMAP's
+    # receivedAt), where the source knows it. Only a dropped message keeps it:
+    # it is where the poller has to be rewound to read that message again.
+    def ingest(raw, source: nil, received_at: nil)
       mail = ::Mail.read_from_string(raw)
 
       if (reason = LoopGuard.reject_reason(mail))
         Rails.logger.info "[Ingest] rejected (#{reason})"
+        DroppedMail.record!(kind: "rejected", reason: reason, raw: raw, mail: mail,
+          source: source, received_at: received_at)
         return Result.new(outcome: :rejected, reason: reason)
       end
 
@@ -81,6 +86,10 @@ module Ingest
         message.save!
 
         attach!(message, split.attachments)
+
+        # A message that failed on an earlier attempt, and has now come back
+        # through a rewind, is no longer missing.
+        DroppedMail.clear!(message_id)
 
         # Inbound reopens: a customer replying to something an agent considered
         # finished is exactly the case that must not stay buried behind a

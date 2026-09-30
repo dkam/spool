@@ -34,6 +34,19 @@
   <% end %>
 
   <div class="ml-auto flex items-center gap-4 text-sm" data-controller="theme">
+    <%# Only when mail has stopped moving — see MailHealth. Signed-in only, like
+        the nav: the login screen has nobody to tell. %>
+    <% if current_agent && (problems = MailHealth.new.problems).any? %>
+      <ul data-mail-health role="status" class="flex items-center gap-4 text-accent">
+        <% problems.each do |problem| %>
+          <li title="<%= problem.hint %>" class="flex items-center gap-2 cursor-help">
+            <span class="w-1.5 h-1.5 rounded-full bg-accent"></span><%= problem.summary %>
+          </li>
+        <% end %>
+      </ul>
+      <span class="w-px h-3.5 bg-rule"></span>
+    <% end %>
+
     <span class="font-mono text-faint"><%= mailbox_address %></span>
     <span class="w-px h-3.5 bg-rule"></span>
 

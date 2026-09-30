@@ -12,10 +12,16 @@ module Ingest
     # the loop still wakes periodically to honour the stop flag.
     RESERVE_TIMEOUT = 30
 
-    # Bury rather than release once a job has been retried this many times, so
-    # a poison-pill message doesn't cycle on the tube forever. A buried job is
-    # visible in tuber's stats and can be kicked back once the bug is fixed —
-    # which is the point: silently dropping a customer's email is worse.
+    # Give up on a job once it has been retried this many times, so a
+    # poison-pill message doesn't cycle on the tube forever.
+    #
+    # Giving up means reporting it and deleting it — never burying. A buried job
+    # is visible only to someone who asks tuber, and it keeps its `idp:` key
+    # live, so every later put with that key is swallowed as a duplicate. That
+    # is how one buried poll stopped inbound mail for six weeks. Nothing is lost
+    # by deleting instead: every job here is a pointer to something that
+    # survives it — the mail is still in the mailbox, the reply is still an
+    # undelivered row — and each consumer's #gave_up records what to recover.
     MAX_RETRIES = 5
 
     # A job's TTR is the server's "is this worker still alive?" timer. Hold a
@@ -182,16 +188,20 @@ module Ingest
       raise NotImplementedError
     end
 
-    def safe_finalize(job, outcome)
+    # :ok deletes the job. :retry releases it for another attempt, or gives up
+    # on it once MAX_RETRIES is reached. :give_up gives up now, for a failure
+    # no retry will change.
+    def safe_finalize(job, outcome, error = nil)
       case outcome
       when :ok then job.delete
-      when :retry then bury_or_release(job)
+      when :retry then retry_or_give_up(job, error)
+      when :give_up then give_up(job, error)
       end
     rescue ::Tuber::NotFoundError
       # Already gone server-side — nothing to do.
     end
 
-    def bury_or_release(job)
+    def retry_or_give_up(job, error)
       releases = begin
         job.stats.releases.to_i
       rescue
@@ -199,11 +209,35 @@ module Ingest
       end
 
       if releases >= MAX_RETRIES
-        Rails.logger.error "[#{self.class.name}] burying job after #{releases} retries"
-        job.bury
+        give_up(job, error)
       else
         job.release(delay: RETRY_DELAY)
       end
+    end
+
+    # Record, report, delete. The delete happens even when recording fails: a
+    # job left reserved comes back after its TTR and fails again forever, and
+    # the exception has already been reported.
+    def give_up(job, error)
+      Rails.logger.error "[#{self.class.name}] giving up on job #{job_id(job)}"
+      begin
+        gave_up(job, error)
+      rescue => e
+        log_exception("[#{self.class.name}] couldn't record the job it gave up on", e)
+      end
+      Sentry.capture_message("[#{self.class.name}] gave up on a job",
+        level: :error, tags: {consumer: self.class.name},
+        extra: {error: error && "#{error.class}: #{error.message}"})
+      job.delete
+    end
+
+    # Override to record what was lost when a job is given up on.
+    def gave_up(job, error) = nil
+
+    def job_id(job)
+      job.id
+    rescue
+      "?"
     end
 
     # Every consumer failure comes through here — the loop's own rescues and

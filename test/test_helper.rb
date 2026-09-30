@@ -44,5 +44,19 @@ module ActiveSupport
       original.each { |k, v| v.nil? ? ENV.delete(k) : ENV[k] = v }
       SpoolAuthorization.reset_cache!
     end
+
+    # Replaces a module or class method for the duration of the block, e.g.
+    #
+    #   stubbing(Ingest::Inbound, :ingest, ->(*, **) { raise "boom" }) { ... }
+    #
+    # Hand-rolled because minitest 6 no longer bundles minitest/mock, and this is
+    # all its `stub` ever did.
+    def stubbing(object, name, replacement)
+      original = object.method(name)
+      object.singleton_class.define_method(name, replacement)
+      yield
+    ensure
+      object.singleton_class.define_method(name, original)
+    end
   end
 end

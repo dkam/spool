@@ -32,6 +32,7 @@ Defined in `app/mcp/`, registered in `SpoolMcp.server`.
 | `add_note` | An internal note via `Message.compose!`. Never emailed, state untouched. |
 | `reply_to_ticket` | An outbound reply via `Message.compose!` — **this emails a real customer** wherever Mailgun is configured. Moves the ticket to waiting; delivery is asynchronous, and the response's `delivery` field says whether the reply was queued or (unconfigured) only stored. |
 | `update_ticket` | Manual state moves (closing, mostly), assignment, and tags (`add_tags` / `remove_tags`). Tagging `spam` also blocks the sender; removing it unblocks — see [tags.md](tags.md). |
+| `mail_status` | Whether mail is moving: the header's problems, plus the last clean poll and how far it has read, the last message ingested, live queue depths, mail turned away or given up on (`DroppedMail`), and undelivered replies. Where to start on "why isn't this email in Spool?". |
 
 Two vocabulary rules, both enforced in `SpoolMcp` so the tools can't drift
 from the UI:

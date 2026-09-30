@@ -47,9 +47,9 @@ warning surfaces it so it can't drift into a production deploy unnoticed.
 
 Net::SMTP errors split into two buckets, matching the Mailgun path's
 divide: permanent failures (auth, 5xx, refused recipient, unsupported
-command) raise `Outbound::Rejected` so the consumer buries rather than
+command) raise `Outbound::Rejected` so the consumer gives up rather than
 cycling; transient trouble (421, ECONNREFUSED, timeouts) propagates for
-retry, then bury via `MAX_RETRIES`.
+retry, then gives up via `MAX_RETRIES`.
 
 ### Mailgun (`Outbound::Mailgun`)
 
@@ -115,15 +115,20 @@ duplicate. Failures are logged and sent to Sentry, and the backfill sweeps up.
 
 In the consumer (`Ingest::OutboundConsumer`):
 
-- **Bury immediately** — a job body that won't parse, a Message row that
+- **Give up immediately** — a job body that won't parse, a Message row that
   doesn't exist, a message that can never be sent (a note, a customer with no
   email), or a `Rejected` from the transport (Mailgun bad key / unknown
   domain / refused recipient; SMTP auth failure / 5xx / refused recipient).
-  The same request would fail the same way; burying makes it visible in
-  tuber's stats instead of cycling.
-- **Retry, then bury after `MAX_RETRIES`** — network trouble, 5xx, rate
+  The same request would fail the same way.
+- **Retry, then give up after `MAX_RETRIES`** — network trouble, 5xx, rate
   limiting (429 is deliberately not `Rejected`), SMTP 421 / transient 4xx,
   connection failures, missing configuration.
+
+Giving up reports to Sentry and deletes the job — never buries it. The reply
+itself is untouched: a row with no `delivered_at`, which the thread shows as
+not yet delivered and the header counts once it is fifteen minutes old. Fix
+the cause and run the backfill below. A buried job would have held its
+`idp:outbound-<id>` key and made that backfill silently skip the reply.
 
 ## Backfill
 
@@ -136,7 +141,7 @@ before a transport was configured (including everything from before delivery
 existed), or while the queue was down. Safe to run at any time: the
 per-message `idp` key suppresses anything already on the tube, and
 `delivered_at` skips anything already sent. It refuses to run unconfigured
-rather than queueing jobs that can only bury themselves.
+rather than queueing jobs that can only fail.
 
 ## Testing
 

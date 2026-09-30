@@ -42,6 +42,17 @@ class Jmap::PollerTest < ActiveSupport::TestCase
     assert_equal raw, Base64.decode64(payload[:raw])
   end
 
+  # A message given up on downstream is recovered by rewinding the cursor to
+  # when it arrived, and the cursor is kept in the mailbox's clock, not the
+  # sender's Date header.
+  test "each job carries the mailbox's receivedAt" do
+    @server.add_email(raw_message("hello"), @spool, received_at: "2026-09-30T03:08:44Z")
+
+    capture_puts { poller.poll }
+
+    assert_equal "2026-09-30T03:08:44Z", @put.sole.last[:received_at]
+  end
+
   test "an empty folder is a no-op" do
     result = capture_puts { poller.poll }
 
@@ -135,6 +146,44 @@ class Jmap::PollerTest < ActiveSupport::TestCase
     # claim worth pinning: two method calls, one request.
     chained = @server.requests.find { |calls| calls.first.first == "Email/query" }
     assert_equal ["Email/query", "Email/get"], chained.map(&:first)
+  end
+
+  # --- the heartbeat -------------------------------------------------------
+  #
+  # The cursor's updated_at only moves when mail does, so on a quiet day it
+  # can't tell a running poller from a stopped one. polled_at is what the header
+  # checks.
+
+  test "a clean poll records that it ran, even with nothing to read" do
+    freeze_time do
+      capture_puts { poller.poll }
+
+      assert_equal Time.current, IngestCursor.find_by!(source: "jmap:Spool").polled_at
+    end
+  end
+
+  test "recording a poll doesn't move the cursor" do
+    @server.add_email(raw_message("once"), @spool)
+    capture_puts { poller.poll }
+    position = IngestCursor.position_for("jmap:Spool")
+
+    travel 1.minute
+    capture_puts { poller.poll }
+
+    cursor = IngestCursor.find_by!(source: "jmap:Spool")
+    assert_equal position, cursor.position
+    assert_equal Time.current.to_i, cursor.polled_at.to_i
+  end
+
+  # A message that can't be downloaded holds the cursor on every poll from then
+  # on. Mail has stopped as surely as if nothing polled at all.
+  test "a poll that couldn't deliver everything isn't recorded as one" do
+    @server.add_email(raw_message("unreadable"), @spool)
+    @server.download_error = true
+
+    capture_puts { poller.poll }
+
+    assert_nil IngestCursor.find_by(source: "jmap:Spool")&.polled_at
   end
 
   # --- failure -------------------------------------------------------------

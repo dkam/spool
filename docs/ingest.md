@@ -1,7 +1,9 @@
 # Inbound mail
 
-`Ingest::Inbound.ingest(raw, source: nil)` takes raw RFC822 bytes and returns a
-`Result` with `outcome` of `:created`, `:duplicate` or `:rejected`.
+`Ingest::Inbound.ingest(raw, source: nil, received_at: nil)` takes raw RFC822
+bytes and returns a `Result` with `outcome` of `:created`, `:duplicate` or
+`:rejected`. `received_at` is when the mailbox says the message arrived, where
+the source knows it; only a dropped message keeps it (see below).
 
 That signature is the whole design. Everything that delivers mail — the JMAP
 poller, a provider webhook, a test fixture, a console paste — calls this one
@@ -10,7 +12,7 @@ method with bytes. Nothing upstream of it knows anything about tickets.
 ```
 raw bytes
    │
-   ├─ LoopGuard.reject_reason        → :rejected, nothing created
+   ├─ LoopGuard.reject_reason        → :rejected, a DroppedMail row and nothing else
    ├─ message_id_for                 → :duplicate if already stored
    │
    ├─ MimeSplitter                   headers / text / html / attachments
@@ -45,7 +47,34 @@ header on outbound mail stays `support@` so that replies land back in the
 support mailbox — which means a Bcc or a list echo can deliver Spool's own
 message straight back to it.
 
-Every rejection is logged with its reason. Nothing is stored.
+Every rejection is logged with its reason, and recorded as a `DroppedMail` row
+(`kind: "rejected"`): Message-ID, sender, subject, receivedAt and the reason, but
+no body. That row is the answer to "why isn't this email in Spool?" — the MCP
+`mail_status` tool lists the recent ones.
+
+## Dropped mail (`DroppedMail`)
+
+Mail that reached Spool and did not become a message, in two kinds:
+
+- **`rejected`** — turned away by LoopGuard, above. Routine.
+- **`failed`** — `Ingest::InboundConsumer` gave up on it after `MAX_RETRIES`.
+  Never routine: the header shows "N messages failed to arrive" until it clears.
+
+Neither stores the body, because the mail is still in the mailbox: Spool never
+writes to it. One row per Message-ID, updated if the same message is dropped
+again. Storing the message later deletes its row, which is how a failure clears.
+
+**Getting a failed message back:** fix whatever it failed on, then
+
+```console
+$ bin/rails jmap:rewind                              # to the earliest failure
+$ bin/rails "jmap:rewind[2026-09-29T00:00:00Z]"      # or to a time
+```
+
+This moves the cursor back to that receivedAt — the poller puts each message's
+`receivedAt` in its job for this — so the next poll reads from there again.
+Everything already stored comes through as a duplicate and is skipped. It only
+ever moves the cursor backwards: forwards would skip unread mail for good.
 
 **A blocked sender is not a rejection rule.** Mail from a customer with
 `blocked_at` set is ingested and stored like any other — the ticket is tagged
@@ -241,8 +270,16 @@ to the newest success instead would step the cursor over a message that never
 arrived and lose it with no trace anywhere.
 
 A message that fails to download therefore holds the cursor and is retried, so a
-permanently broken one retries forever and loudly rather than vanishing. That is
-the right way round for a helpdesk, but it wants eyes on the log.
+permanently broken one retries forever and loudly rather than vanishing. It
+also stops everything behind it, so such a poll doesn't count as a clean one:
+it neither records `polled_at` nor checks in to Splat, and the header says mail
+has stopped.
+
+**The heartbeat.** Every clean poll — everything found was queued, even if that
+was nothing — sets `ingest_cursors.polled_at` and checks in to Splat's
+`jmap-poll` cron monitor. The cursor's `updated_at` can't serve: it only moves
+when mail does, so on a quiet day it can't tell a running poller from a stopped
+one. Six minutes without a clean poll and both the header and Splat say so.
 
 **What this costs.** The folder accumulates instead of draining, so it is an
 archive rather than a worklist — "what's pending" is no longer visible in

@@ -127,6 +127,14 @@ box answers nothing. The wordmark, the mailbox address and the theme switch stay
 is `current_agent` rather than `authenticated?` on purpose: open mode has no
 session, so `authenticated?` is false on a wholly usable app.
 
+**The header says when mail has stopped, and otherwise nothing.** Signed in,
+`MailHealth#problems` renders in accent before the mailbox address — "No mail
+check for about 2 hours", "1 message failed to arrive", "3 replies not
+delivered" — each with its next step as a tooltip. There is no healthy state to
+show: a green dot on every page is a thing you stop seeing, and the point is to
+be seen the day it matters. It reads only SQLite, never tuber, so a hung queue
+can't slow the page that is trying to report it. See [ingest.md](ingest.md#dropped-mail-droppedmail).
+
 **The rail** — the vertical hairline with dots on it — is the one structural
 motif shared by all three screens. A container gets `relative pl-[30px]` with an
 absolutely positioned 1px line at `left-1`, and each child hangs a `-left-[30px]`

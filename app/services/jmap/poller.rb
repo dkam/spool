@@ -93,14 +93,26 @@ module Jmap
       cursor = Cursor.parse(IngestCursor.position_for(cursor_key))
 
       emails = pending(source_id, cursor)
-      return Result.new(queued: 0, failed: 0) if emails.empty?
-
       delivered, queued, failed = deliver(emails)
       advance(cursor, delivered)
 
-      Rails.logger.info("[Jmap::Poller] #{@folder}: queued #{queued}, failed #{failed}")
+      Rails.logger.info("[Jmap::Poller] #{@folder}: queued #{queued}, failed #{failed}") unless emails.empty?
+
+      # Only a poll that delivered everything counts as one. A message that
+      # can't be fetched holds the cursor on every poll after it, so nothing
+      # behind it arrives either: mail has stopped, and the heartbeat has to go
+      # quiet to say so.
+      IngestCursor.polled!(cursor_key) if failed.zero?
 
       Result.new(queued: queued, failed: failed)
+    end
+
+    # Keyed by folder rather than just by source. Pointing SPOOL_JMAP_FOLDER
+    # somewhere else is a different queue, and inheriting the old folder's
+    # high-water mark would silently skip everything already sitting in the new
+    # one.
+    def self.cursor_key(folder = ENV.fetch("SPOOL_JMAP_FOLDER", DEFAULT_FOLDER))
+      "jmap:#{folder}"
     end
 
     private
@@ -181,9 +193,11 @@ module Jmap
       emails.each do |email|
         raw = @client.download(email.fetch("blobId"))
 
+        # receivedAt rides along for a message that is later given up on: it
+        # is the cursor position that reads the message again.
         Ingest::Tuber.put(
           Ingest::Tuber::INBOUND_TUBE,
-          {raw: Base64.strict_encode64(raw), source: "jmap"}
+          {raw: Base64.strict_encode64(raw), source: "jmap", received_at: email["receivedAt"]}
         )
 
         queued += 1
@@ -220,12 +234,8 @@ module Jmap
       IngestCursor.advance(cursor_key, Cursor.new(at, ids).dump)
     end
 
-    # Keyed by folder rather than just by source. Pointing SPOOL_JMAP_FOLDER
-    # somewhere else is a different queue, and inheriting the old folder's
-    # high-water mark would silently skip everything already sitting in the new
-    # one.
     def cursor_key
-      "jmap:#{@folder}"
+      self.class.cursor_key(@folder)
     end
 
     # Mailboxes are few, so fetching all of them and resolving in Ruby is

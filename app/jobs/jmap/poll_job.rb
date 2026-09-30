@@ -27,8 +27,12 @@ module Jmap
         return
       end
 
-      Poller.from_env.poll
-      Sentry.capture_check_in(MONITOR_SLUG, :ok, monitor_config: MONITOR_CONFIG)
+      result = Poller.from_env.poll
+
+      # A message that couldn't be fetched holds the cursor, so mail behind it
+      # has stopped too, though the poll itself returned. Same rule as
+      # IngestCursor.polled!: only a poll that delivered everything counts.
+      Sentry.capture_check_in(MONITOR_SLUG, :ok, monitor_config: MONITOR_CONFIG) if result.failed.zero?
     rescue Http::Unauthorized => e
       # No retry will fix a revoked or under-scoped token, and a helpdesk that
       # has quietly stopped receiving mail is the worst failure this system has.

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/fake_tuber_job"
 
 # What happens to a scheduled job once it has run, and above all once it has
 # failed.
@@ -13,26 +14,6 @@ require "test_helper"
 # "firing" every minute and inbound mail stopped for six weeks with nothing in
 # the logs after the burial.
 class Ingest::DispatchConsumerTest < ActiveSupport::TestCase
-  # Stands in for a reserved Tuber::Job: records what the consumer did to it.
-  class FakeJob
-    Stats = Struct.new(:releases)
-
-    attr_reader :body, :outcome
-
-    def initialize(klass, releases: 0)
-      @body = JSON.generate({"class" => klass.name, "args" => []})
-      @releases = releases
-    end
-
-    def stats = Stats.new(@releases)
-
-    def delete = @outcome = :deleted
-
-    def release(delay: 0) = @outcome = :released
-
-    def bury = @outcome = :buried
-  end
-
   class SucceedingJob
     def perform = nil
   end
@@ -41,24 +22,28 @@ class Ingest::DispatchConsumerTest < ActiveSupport::TestCase
     def perform = raise(Net::OpenTimeout, "Failed to open TCP connection to api.fastmail.com:443")
   end
 
+  def scheduled(klass, releases: 0)
+    FakeTuberJob.new({"class" => klass.name, "args" => []}, releases: releases)
+  end
+
   def dispatch(job)
     Ingest::DispatchConsumer.new(tube: "spool.maintenance").send(:process_batch, [job])
     job.outcome
   end
 
   test "a job that runs is deleted" do
-    assert_equal :deleted, dispatch(FakeJob.new(SucceedingJob))
+    assert_equal :deleted, dispatch(scheduled(SucceedingJob))
   end
 
   # A retry would hold the idp key for its delay and do what the next tick does
   # anyway, so a failure is dropped straight away.
   test "a job that fails is deleted, not released for a retry" do
-    assert_equal :deleted, dispatch(FakeJob.new(FailingJob))
+    assert_equal :deleted, dispatch(scheduled(FailingJob))
   end
 
   test "a job that keeps failing is deleted, never buried" do
     releases = Ingest::TubeConsumer::MAX_RETRIES
 
-    assert_equal :deleted, dispatch(FakeJob.new(FailingJob, releases: releases))
+    assert_equal :deleted, dispatch(scheduled(FailingJob, releases: releases))
   end
 end

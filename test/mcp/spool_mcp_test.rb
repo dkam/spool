@@ -202,6 +202,49 @@ class SpoolMcpTest < ActiveSupport::TestCase
   test "the server registers every tool" do
     tools = SpoolMcp.server.tools.keys
 
-    assert_equal %w[add_note get_ticket list_tickets reply_to_ticket update_ticket], tools.sort
+    assert_equal %w[add_note get_ticket list_tickets mail_status reply_to_ticket update_ticket], tools.sort
+  end
+
+  # --- mail_status -----------------------------------------------------------
+
+  # What mail_status is for: an email someone expected that never showed up.
+  test "mail_status answers why an email isn't in Spool" do
+    DroppedMail.create!(kind: "rejected", reason: "precedence: bulk", message_id: "<news@vendor.test>",
+      from_email: "news@vendor.test", subject: "August deals", received_at: Time.utc(2026, 9, 30, 3, 8, 44))
+    DroppedMail.create!(kind: "failed", reason: "ActiveRecord::StatementTimeout: database is locked",
+      message_id: "<lost@example.com>", received_at: Time.utc(2026, 9, 30, 4))
+
+    result = with_env("SPOOL_JMAP_TOKEN" => "t", "SPOOL_JMAP_FOLDER" => nil) do
+      IngestCursor.advance("jmap:Spool", Jmap::Poller::Cursor.new("2026-09-30T05:00:00Z", ["M1"]).dump)
+      IngestCursor.polled!("jmap:Spool", at: 2.hours.ago)
+
+      stubbing(Ingest::Tuber, :reachable?, -> { false }) { payload(SpoolMcp::MailStatus.call) }
+    end
+
+    assert_equal false, result[:ok]
+    assert_equal %w[polling failed], result[:problems].map { |p| p[:key] }
+    assert_equal "2026-09-30T05:00:00Z", result.dig(:polling, :read_up_to)
+    assert_equal "unreachable", result[:queues]
+    assert_equal "<lost@example.com>", result[:failed].sole[:message_id]
+    assert_equal "2026-09-30T04:00:00Z", result[:failed].sole[:received_at]
+    assert_equal "precedence: bulk", result[:rejected].sole[:reason]
+    assert_equal "August deals", result[:rejected].sole[:subject]
+    assert_equal @inbound.ticket_id, result.dig(:last_ingested, :ticket_id)
+  end
+
+  test "mail_status is ok when mail is moving" do
+    result = with_env("SPOOL_JMAP_TOKEN" => "t", "SPOOL_JMAP_FOLDER" => nil) do
+      IngestCursor.polled!("jmap:Spool")
+
+      stubbing(Ingest::Tuber, :reachable?, -> { true }) do
+        stubbing(Ingest::Tuber, :queue_depths, -> { {"spool.inbound" => {ready: 0, reserved: 0, buried: 0, delayed: 0}} }) do
+          payload(SpoolMcp::MailStatus.call)
+        end
+      end
+    end
+
+    assert result[:ok]
+    assert_empty result[:problems]
+    assert_equal 0, result.dig(:queues, :"spool.inbound", :buried)
   end
 end
