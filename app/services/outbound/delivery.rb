@@ -94,6 +94,10 @@ module Outbound
 
       provider_id = transport.deliver_mime(to: to, mime: mime_for(message).to_s)
       message.update!(delivered_at: Time.current)
+      # The ticket row is the broadcast signal (see Ticket) and a delivery
+      # writes nothing else on it, so touch it: the thread rendered right
+      # after Send refreshes out of "Queued · not yet delivered".
+      message.ticket.touch
 
       Rails.logger.info "[Outbound::Delivery] delivered message #{message.id} to #{to} via #{transport_name(transport)} (#{provider_id})"
       :delivered

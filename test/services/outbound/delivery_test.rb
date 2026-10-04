@@ -117,6 +117,19 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
     assert_equal 1, @transport.deliveries.size
   end
 
+  # The thread rendered right after Send says "Queued · not yet delivered",
+  # and the send lands seconds later in the worker. Unless the open thread is
+  # told to refresh, it goes on saying "Queued" until someone reloads.
+  test "delivery refreshes the open thread so it stops saying Queued" do
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "On it.")
+
+    with_mailgun_env do
+      assert_turbo_stream_broadcasts @ticket do
+        Outbound::Delivery.deliver!(message, transport: @transport)
+      end
+    end
+  end
+
   test "a note can never be delivered" do
     note = Message.compose!(ticket: @ticket, agent: @agent, text: "DNS again.", direction: "note")
 
