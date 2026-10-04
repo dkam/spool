@@ -180,7 +180,7 @@ Stimulus only, one controller per behaviour, no inline handlers.
 
 | Controller | Does |
 | --- | --- |
-| `theme` | Light/dark. Writes `localStorage["spool:theme"]`, sets `data-theme` on `<html>`, marks the active button. |
+| `theme` | Light/dark, following the system until told otherwise. Sets `data-theme` on `<html>`, marks the active button, and keeps `localStorage["spool:theme"]` only while the choice differs from the system. |
 | `disclosure` | The quoted-text show/hide, with the label swap. |
 | `composer` | Reply/note toggle, template panel, template insertion at the cursor. |
 | `notes` | Debounced customer-notes autosave, flushing on blur and `pagehide`. |
@@ -195,6 +195,12 @@ head, not by the controller — Stimulus connects after the page has painted, wh
 would mean a white flash for dark-theme users on every load. Turbo replaces
 `<body>` and leaves `<html>` alone, so the attribute set there survives every
 navigation and the script runs once per full load.
+
+**The system's light/dark setting is the default, and there is no "System"
+button.** A choice is remembered only while it differs from what the system
+says: picking the theme the system would have given you anyway forgets the
+choice, and Spool follows the system again, live, when it flips. The two words
+stay a plain switch, and the tooltip says which of the two is in charge.
 
 **Templates insert, never send.** `composer#useTemplate` inserts at the cursor
 when there's already a draft rather than replacing it.
@@ -491,7 +497,8 @@ the thread does not stream.
   pending, note → state untouched and no threading headers, empty reply refused,
   assign/close, notes autosave, attachment download).
 - `test/system/spool_ui_test.rb` — the parts that only exist once JavaScript
-  runs: the theme switch and its persistence across a navigation, the quoted-text
+  runs: the theme following the system, a choice persisting across a navigation
+  and being forgotten once it matches the system again, the quoted-text
   disclosure, the template picker not sending, the note toggle hiding the
   recipient, a reply appearing in the thread, and the keyboard — walking the
   list, opening, coming back to the same row, the legend appearing on a held

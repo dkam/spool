@@ -32,6 +32,9 @@ class SpoolUiTest < ApplicationSystemTestCase
       body: "Could you send the last twenty lines of the delivery log?")
   end
 
+  # The browser outlives the test, and so would an emulated system theme.
+  teardown { emulate_color_scheme "" }
+
   # Every other test here reaches the thread with `visit ticket_path`, which is
   # why a broken link out of the list survived a green suite. The rows live in
   # the ticket_list turbo-frame, so the navigation has to be told to leave it.
@@ -70,17 +73,38 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_no_selector "[data-shortcuts-target='back']"
   end
 
-  test "the theme switch applies dark and survives a navigation" do
+  test "the theme follows the system until you pick one" do
+    emulate_color_scheme "dark"
     visit root_path
-    assert_equal "light", page.find("html")[:"data-theme"]
+
+    # Applied by the pre-paint script, so the first paint is already dark.
+    assert_selector "html[data-theme='dark']"
+    assert_selector "button[aria-pressed='true']", text: "Dark"
+
+    # And it keeps following: no reload when the system flips at sunset.
+    emulate_color_scheme "light"
+    assert_selector "html[data-theme='light']"
+    assert_selector "button[aria-pressed='true']", text: "Light"
+  end
+
+  test "picking the other theme sticks, and picking the system's again goes back to following it" do
+    emulate_color_scheme "light"
+    visit root_path
 
     click_button "Dark"
-    assert_equal "dark", page.find("html")[:"data-theme"]
+    assert_selector "html[data-theme='dark']"
 
     # Persisted in localStorage and reapplied by the layout's pre-paint script,
     # so it has to still be dark after a full page load.
     visit ticket_path(@ticket)
-    assert_equal "dark", page.find("html")[:"data-theme"]
+    assert_selector "html[data-theme='dark']"
+
+    # Light is what the system says anyway, so this isn't a preference worth
+    # keeping — the proof it was forgotten is that the system leads again.
+    click_button "Light"
+    assert_selector "html[data-theme='light']"
+    emulate_color_scheme "dark"
+    assert_selector "html[data-theme='dark']"
   end
 
   test "quoted history is hidden until asked for" do
@@ -573,6 +597,14 @@ class SpoolUiTest < ApplicationSystemTestCase
         return dot ? getComputedStyle(dot).backgroundColor : null
       })()
     JS
+  end
+
+  # Stands in for the operating system's light/dark setting. Change events fire
+  # as they would for the real thing, so a page already open sees it flip.
+  # An empty value hands the setting back to the browser.
+  def emulate_color_scheme(value)
+    page.driver.browser.execute_cdp("Emulation.setEmulatedMedia",
+      features: [{name: "prefers-color-scheme", value: value}])
   end
 
   def fill_in_notes(text)

@@ -18,17 +18,20 @@
     <%# Runs before first paint so a dark-theme user never sees a white flash.
         Stimulus connects too late for this — by then the page has painted.
         Turbo replaces <body> and leaves <html> alone, so the attribute set
-        here survives every subsequent navigation and this only runs once. %>
+        here survives every subsequent navigation and this only runs once.
+        A theme picked in Spool wins; otherwise the system's setting does. %>
     <script>
       (function () {
+        var theme = null;
         try {
-          var stored = localStorage.getItem("spool:theme");
-          if (stored === "dark" || stored === "light") {
-            document.documentElement.setAttribute("data-theme", stored);
-          }
+          theme = localStorage.getItem("spool:theme");
         } catch (e) {
-          /* Private browsing with storage disabled — the light default stands. */
+          /* Private browsing with storage disabled — follow the system. */
         }
+        if (theme !== "dark" && theme !== "light") {
+          theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
 

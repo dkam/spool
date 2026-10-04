@@ -51,7 +51,8 @@
     <span class="w-px h-3.5 bg-rule"></span>
 
     <%# Theme is a client-side preference the server never sees, so these two
-        style themselves from localStorage on connect rather than from Rails. %>
+        style themselves on connect — from the system's setting, or from
+        localStorage while a choice made here differs from it. %>
     <button type="button"
             data-theme-target="option"
             data-theme-value-param="light"
