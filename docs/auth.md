@@ -145,3 +145,11 @@ current_user_provider   # OIDC_PROVIDER_NAME as recorded at login
 ```
 
 Skip the filter on an action with `allow_unauthenticated_access only: [...]`.
+
+## The other way in: MCP tokens
+
+`POST /mcp` doesn't use the session at all. It takes an agent's bearer token,
+issued from Settings, and re-checks that agent against the allowlist on every
+call — so everything above about who is allowed in still decides it. Open mode
+does not open it, and half-configured auth refuses it. See
+[mcp.md](mcp.md#connecting-over-http).

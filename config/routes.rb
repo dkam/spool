@@ -36,6 +36,19 @@ Rails.application.routes.draw do
   # a debounced textarea rather than a submit button — hence update with no edit.
   resources :customers, only: %i[show update]
 
+  # One screen for now, holding the agent's MCP token. Issuing and rotating are
+  # the same act (a new token replaces the old), so create covers both.
+  resource :settings, only: %i[show]
+  namespace :settings do
+    resource :mcp_token, only: %i[create destroy]
+  end
+
+  # The MCP endpoint, authenticated by an agent's bearer token rather than the
+  # session. POST is the protocol; GET and DELETE are the Streamable HTTP verbs
+  # this server doesn't offer, answered 405 rather than 404. See docs/mcp.md.
+  post "mcp", to: "mcp#create"
+  match "mcp", to: "mcp#method_not_allowed", via: %i[get delete]
+
   # Attachment bytes live in the primary SQLite file, not Active Storage, so
   # there is no blob URL to link to — every download is this action. Keyed on
   # the join row because the filename belongs to the join, not the blob.

@@ -2,8 +2,9 @@
 
 # Spool's MCP server: the domain exposed as typed tools, so an agent (Claude
 # Code, or anything else speaking MCP) can read and work tickets without
-# scraping the UI. Served over stdio by bin/mcp, registered for this repo in
-# .mcp.json. See docs/mcp.md.
+# scraping the UI. Served two ways: over HTTP at POST /mcp with an agent's
+# bearer token (McpController), and over stdio by bin/mcp, registered for this
+# repo in .mcp.json. See docs/mcp.md.
 #
 # The tools speak the UI's vocabulary, not the schema's — a ticket state is
 # "open / waiting / closed", exactly what the filter chips and the URL say,
@@ -26,11 +27,16 @@ module SpoolMcp
 
   module_function
 
-  def server
+  # `agent` is who this connection is: the token's owner over HTTP, nil over
+  # stdio. It rides in the server context to every tool call, and #author
+  # signs writes with it. Built per request over HTTP, since the agent differs.
+  def server(agent: nil)
     MCP::Server.new(
       name: "spool",
       version: Spool::VERSION,
       tools: [ListTickets, GetTicket, AddNote, ReplyToTicket, UpdateTicket, MailStatus],
+      server_context: {agent: agent},
+      configuration: MCP::Configuration.new(exception_reporter: method(:report_exception)),
       instructions: <<~TEXT
         Spool is a small email helpdesk. Tickets belong to customers and hold a
         chronological thread of messages: "inbound" from the customer,
@@ -40,7 +46,8 @@ module SpoolMcp
 
         Start with list_tickets (defaults to open — the inbox), read a thread
         with get_ticket, and write with add_note, reply_to_ticket or
-        update_ticket. reply_to_ticket emails a real customer (asynchronously,
+        update_ticket. Writes are signed by the agent whose token this
+        connection uses. reply_to_ticket emails a real customer (asynchronously,
         via the configured outbound transport) wherever delivery is configured — its response says
         whether the reply was queued or only stored.
 
@@ -70,13 +77,47 @@ module SpoolMcp
     STATES.key(db_state) || db_state
   end
 
-  # The author for a write. A named agent must already exist — this server
-  # provisions nobody but its own stand-in, so a typo'd email is an error, not
-  # a new colleague.
-  def author(agent_email)
+  # The author for a write.
+  #
+  # A connection with an agent (HTTP, by token) writes as that agent and only
+  # that agent: agent_email may name them, but naming a colleague is refused
+  # rather than ignored, so a caller who meant to sign as someone else finds
+  # out. Without one (stdio, run by whoever has a shell on the box) agent_email
+  # picks the author, and omitting it writes as the stand-in.
+  #
+  # A named agent must already exist — this server provisions nobody but its
+  # own stand-in, so a typo'd email is an error, not a new colleague.
+  def author(agent_email, server_context = nil)
+    if (connected = connected_agent(server_context))
+      return connected if agent_email.blank? || Agent.normalize_value_for(:email, agent_email) == connected.email
+
+      raise ToolError, "This connection writes as #{connected.email}; agent_email can't name anyone else."
+    end
+
     return mcp_agent if agent_email.blank?
 
     named_agent(agent_email)
+  end
+
+  # `try`, because the context is an MCP::ServerContext wrapping the hash given
+  # to #server (it forwards #[]), a plain hash in tests, or wraps nil on stdio.
+  def connected_agent(server_context)
+    server_context.try(:[], :agent)
+  end
+
+  # The gem turns an exception escaping a tool into an opaque "Internal error
+  # calling tool …" for the client — deliberately, so internals don't leak —
+  # and hands the exception here. Without a reporter it goes nowhere at all.
+  #
+  # It hands over the caller's mistakes too (an unknown tool, bad params, an
+  # unsupported protocol version), as RequestHandlerErrors with no original
+  # error behind them. Those are answered to the client already, and are
+  # nothing to fix here.
+  def report_exception(exception, _context = nil)
+    return if exception.is_a?(MCP::Server::RequestHandlerError) && exception.error_type != :internal_error
+
+    Rails.logger.error("MCP tool error: #{exception.class}: #{exception.message}")
+    Sentry.capture_exception(exception)
   end
 
   def named_agent(email)

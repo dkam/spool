@@ -1,0 +1,119 @@
+<% content_for :title, "Settings · Spool" %>
+
+<%# A freshly issued token is on this page for one request (see
+    Settings::McpTokensController#create). Turbo would otherwise snapshot it
+    on the way out and show it again on Back. Unconditional, since a snapshot
+    of settings saves nothing worth having. %>
+<% content_for :head do %>
+  <meta name="turbo-cache-control" content="no-cache">
+<% end %>
+
+<% content_for :shortcuts do %>
+  <span class="flex items-center gap-2"><kbd>T</kbd> Tickets</span>
+  <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
+<% end %>
+
+<div class="max-w-[880px] px-14 pt-11 pb-30">
+  <div class="flex items-baseline gap-3 text-sm text-soft">
+    <%= link_to "Tickets", root_path, class: "hover:text-ink hover:no-underline" %>
+    <span class="text-faint">/</span>
+    <span>Settings</span>
+  </div>
+
+  <h1 class="text-title font-bold tracking-[-0.02em] mt-2.5">Settings</h1>
+  <div class="mt-2 font-mono text-sm text-soft"><%= current_agent.email %></div>
+
+  <% if notice %>
+    <p class="mt-4 text-sm text-soft"><%= notice %></p>
+  <% end %>
+
+  <section class="mt-11">
+    <div class="flex items-baseline gap-3 pb-3 border-b border-rule-strong">
+      <h2 class="font-semibold">MCP</h2>
+      <span class="text-sm text-soft">Let an assistant work the inbox</span>
+    </div>
+
+    <p class="mt-4 max-w-[640px] text-soft">
+      An assistant connected with your token can list and read tickets, add
+      notes, change state, tags and assignment, and reply to customers — by
+      real email. Everything it writes is signed as you.
+    </p>
+
+    <%# The same modular grid as the customer screen's facts. %>
+    <div class="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-8 mt-8 py-[18px] border-t border-b border-rule">
+      <div class="min-w-0">
+        <div class="text-2xs uppercase tracking-[0.09em] text-faint">Endpoint</div>
+        <div class="mt-1.5 font-mono text-sm break-all"><%= mcp_url %></div>
+      </div>
+      <div>
+        <div class="text-2xs uppercase tracking-[0.09em] text-faint">Token</div>
+        <div class="mt-1.5">
+          <%= @mcp_token ? "Issued #{l(@mcp_token.created_at.to_date, format: :long)}" : "None" %>
+        </div>
+      </div>
+      <div>
+        <div class="text-2xs uppercase tracking-[0.09em] text-faint">Last used</div>
+        <div class="mt-1.5" data-mcp-last-used><%= @mcp_token&.last_used_at ? ticket_time(@mcp_token.last_used_at) : "Never" %></div>
+      </div>
+    </div>
+
+    <%# Shown on the one request after issuing, and never again: only the
+        digest is stored. The accent rule is state, as on the shortcut legend —
+        this is the one moment the token exists anywhere but the agent's hands. %>
+    <% if @issued_token %>
+      <div class="mt-8 pt-5 border-t border-accent">
+        <div class="text-2xs uppercase tracking-[0.09em] text-accent">New token · shown once</div>
+        <p class="mt-2 text-sm text-soft">
+          Copy it now. Spool keeps only a fingerprint of it, so this page can't
+          show it again — if it's lost, rotate.
+        </p>
+
+        <div class="mt-4 flex items-baseline gap-4" data-controller="clipboard">
+          <%# One line of ERB: the block wraps, and any whitespace inside it
+              would be copied with the token. %>
+          <code data-mcp-token data-clipboard-target="source" class="flex-1 min-w-0 font-mono text-sm break-all select-all"><%= @issued_token %></code>
+          <button type="button" data-action="clipboard#copy" class="cursor-pointer text-sm text-soft hover:text-ink">
+            <span data-clipboard-target="label">Copy</span>
+          </button>
+        </div>
+
+        <%# --scope user so it answers in every directory, not just this one. %>
+        <div class="mt-6 text-2xs uppercase tracking-[0.09em] text-faint">Add to Claude Code</div>
+        <div class="mt-2 flex items-baseline gap-4" data-controller="clipboard">
+          <code data-mcp-command data-clipboard-target="source" class="flex-1 min-w-0 font-mono text-xs leading-relaxed text-soft break-all select-all">claude mcp add --transport http --scope user spool <%= mcp_url %> --header "Authorization: Bearer <%= @issued_token %>"</code>
+          <button type="button" data-action="clipboard#copy" class="cursor-pointer text-sm text-soft hover:text-ink">
+            <span data-clipboard-target="label">Copy</span>
+          </button>
+        </div>
+      </div>
+    <% end %>
+
+    <%# Issuing and rotating are one act — a new token replaces the old — so
+        both post to the same place. Rotate and revoke cut off whatever is
+        using the current token, which is worth a confirm. %>
+    <div class="mt-8 flex items-baseline gap-6">
+      <% if @mcp_token %>
+        <%= button_to settings_mcp_token_path, method: :post,
+              form: { data: { turbo_confirm: "Rotate your MCP token? Anything using the current one stops working until it has the new one." } },
+              class: "flex items-center gap-2.5 cursor-pointer font-semibold text-ink hover:underline" do %>
+          <span class="w-[7px] h-[7px] rounded-full bg-accent"></span>
+          Rotate token
+        <% end %>
+        <%= button_to "Revoke", settings_mcp_token_path, method: :delete,
+              form: { data: { turbo_confirm: "Revoke your MCP token? Anything using it stops working." } },
+              class: "cursor-pointer text-soft hover:text-ink" %>
+      <% else %>
+        <%= button_to settings_mcp_token_path, method: :post,
+              class: "flex items-center gap-2.5 cursor-pointer font-semibold text-ink hover:underline" do %>
+          <span class="w-[7px] h-[7px] rounded-full bg-accent"></span>
+          Generate token
+        <% end %>
+      <% end %>
+    </div>
+
+    <p class="mt-6 max-w-[640px] text-sm text-faint">
+      The token stops working when it is rotated or revoked, or when your
+      address leaves Spool's allowlist.
+    </p>
+  </section>
+</div>

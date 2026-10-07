@@ -94,6 +94,7 @@ app/views/
     _message.html.erb            one thread entry, three treatments
     _composer.html.erb           reply/note box + template picker
   customers/show.html.erb        stat grid, ticket list, autosaving notes
+  settings/show.html.erb         the agent's MCP token: issue once, rotate, revoke
   login/index.html.erb           the signed-out screen
   shared/_footer.html.erb        version, revision, Rails, Ruby, GitHub
 ```
@@ -116,8 +117,8 @@ only two copies.
 The footer also **makes room for the shortcut legend**, which is fixed to the
 same bottom-left corner. Only while the legend is up (`body:has(…)` in the
 stylesheet, since the legend renders after the footer and CSS cannot select
-backwards) — held, the overlap lasts as long as your thumb, but latched it lasts
-until Escape, and it covers the version numbers completely.
+backwards) — it stays up until `?` puts it away, and it covers the version
+numbers completely.
 
 **The header carries what you can act on.** The nav and the search box render
 only when `current_agent` is present, because the login screen renders the same
@@ -125,7 +126,8 @@ layout: a Tickets link there returns you to the page you are on, and a search
 box answers nothing. The wordmark, the mailbox address and the theme switch stay
 — locked out, "which instance is this" is still a real question. The condition
 is `current_agent` rather than `authenticated?` on purpose: open mode has no
-session, so `authenticated?` is false on a wholly usable app.
+session, so `authenticated?` is false on a wholly usable app. The same goes for
+the Settings link beside Sign out — the stand-in agent has settings too.
 
 **The header says when mail has stopped, and otherwise nothing.** Signed in,
 `MailHealth#problems` renders in accent before the mailbox address — "No mail
@@ -185,8 +187,8 @@ Stimulus only, one controller per behaviour, no inline handlers.
 | `composer` | Reply/note toggle, template panel, template insertion at the cursor. |
 | `notes` | Debounced customer-notes autosave, flushing on blur and `pagehide`. |
 | `autosubmit` | `requestSubmit()` on change — the assignee select. |
-| `shortcuts` | Keyboard navigation and the latch. See below. |
-| `search` | Debounced search-as-you-type, and Escape to clear. See below. |
+| `shortcuts` | Keyboard navigation and the legend. See below. |
+| `search` | Debounced search-as-you-type, Escape to clear, and a flush when the box loses focus. See below. |
 
 Two things worth knowing:
 
@@ -207,103 +209,124 @@ when there's already a draft rather than replacing it.
 
 ## The keyboard
 
-Modelled on Basecamp: **hold Shift and the shortcuts are live.**
+**Bare keys, the way Gmail and GitHub do it.** Shift still works, for fingers
+that learned it when it was required.
 
 | Key | Does | Where |
 | --- | --- | --- |
-| `⇧J` / `⇧↓` | Next ticket | any list |
-| `⇧K` / `⇧↑` | Previous ticket | any list |
-| `⇧L` / `⇧→` | Open the selected ticket | any list |
-| `⇧H` / `⇧←` | Back to the list | ticket |
-| `⇧T` | The ticket list, unnarrowed | everywhere |
-| `/` or `?` | Focus search | everywhere |
+| `J` / `K` | Next / previous row | any list |
+| `L` / `↵` / `→` | Open the selected row | any list |
+| `J` / `K` | Next / previous ticket in the list it was opened from | ticket |
+| `H` / `Esc` / `←` | Back to that list | ticket |
+| `T` | The ticket list, unnarrowed | everywhere |
+| `/` | Focus search — on the list, or go there | everywhere |
+| `?` | Show / hide the legend | everywhere |
 | `↓` / `↑` | Next / previous result | caret in the search box |
-| `↵` | Open the selected result | caret in the search box |
-| `⇧⇧` | Latch shortcut mode | everywhere |
-| `Esc` | Unlatch, or clear the search box | everywhere |
+| `↵` | Open the selected result, or put the box down | caret in the search box |
+| `Esc` | Clear the box, then put it down | caret in the search box |
 
-**`⇧T` and `⇧H` are not the same key twice.** H retraces a step — back to the
-list this ticket was opened from, filter and all. T ignores history and goes to
-the inbox as it is, which is why it is offered on the list itself: a search and
-two filters deep, it is the way out of what you have narrowed yourself into.
-Its target is the header's nav link, so the key exists exactly where that link
-does, and the controller never learns a route.
+**What keeps a shortcut out of a reply is the field check.** A key pressed with
+the caret in an input, a textarea, a select or anything contenteditable belongs
+to the field, never the page. The check reads `event.composedPath()[0]` rather
+than `event.target`, which stops at a shadow root's host — so a field inside a
+web component still counts as a field.
 
-Hold Shift for 400ms and a legend appears bottom-left saying what the current
-screen answers to. The keys work whether or not you wait for it — the legend is
-for people who haven't learned them, not a mode you have to enter.
+This was the other way round until 2026-10: every key was gated behind Shift,
+Basecamp-style, on the argument that a chord is a safer guard than a list of
+elements to exclude, since a control added later can't accidentally opt into
+swallowing keystrokes. It didn't earn its cost. The list is short and closed;
+the field check was already running for every key and carried `/` on its own;
+and the chord cost a modifier on every keystroke on every screen, plus a
+double-tap-Shift "latch" mode whose only job was to hand the bare keys back
+after a search. If a custom widget that takes typing ever arrives that is none
+of those elements, it belongs in `typing()`.
 
-**`/` and `?` are the same physical key** and both focus search. Unshifted it
-types `/`; held with Shift — the gesture every other shortcut uses — it types
-`?`. Taking only one would mean the shortcut worked or didn't depending on a
-finger that makes no difference anywhere else. `/` alone is the single unshifted
-shortcut and a deliberate exception; being wrong costs a focused search box and
-an Escape. `?` is free because the legend appears on a held Shift rather than on
-a help key.
+**`↑` and `↓` are not page shortcuts.** On a ticket they are how you read a long
+thread, and a key that scrolls one screen and leaves another is worse than a key
+with one meaning. `←` and `→` have no competing meaning — nothing here scrolls
+sideways — so they take in and out.
 
-### The latch
+**`Esc` means out.** On a ticket that is back to the list; in the search box it
+clears, then lets go. It never touches the legend, which `?` puts up and puts
+away — otherwise an open legend would swallow the first Escape on every ticket.
+In the composer it does nothing: leaving a half-written reply on a keystroke is
+not something to do by default.
 
-**Tap Shift twice and the keys work unshifted** until you press Escape or click
-into a field. The legend stays up, takes the accent rule, and grows an `Esc
-Exit` item — while latched it isn't a hint any more, it's the only thing on
-screen explaining why bare keys are moving the page.
+**Enter on a link or a button is that control's.** Enter opens the selected row
+only when focus is on nothing that Enter already activates.
 
-It was built for search: after typing a query the caret is in the box and every
-shortcut is correctly suppressed, so two taps blurs the box and hands the keys
-back. It is still the way to get `J`/`K` after a search, and it earns its keep
-anywhere you've clicked into a field and want the list back.
+**`T` and `H` are not the same key twice.** H retraces a step — back to the list
+this ticket was opened from, filter and all. T ignores history and goes to the
+inbox as it is, which is why it is offered on the list itself: a search and two
+filters deep, it is the way out of what you have narrowed yourself into. Its
+target is the header's nav link, so the key exists exactly where that link does,
+and the controller never learns a route.
 
-But **it is not the answer to reaching your search results**, and shipping it as
-the answer was wrong. This doc used to reject arrows-in-the-box as "a rule that
-applies to one field on one screen". What that argument missed is that the box
-is the one place the general rule *cannot* work: `⇧J` in a text field is how you
-type a capital J. So the chord that drives every other list on the site put a
-letter in the query, emptied the results, and left nothing to navigate — while
-the only working gesture was a second one nobody had been told about. See
-"Reaching the results" below.
+**`/` works everywhere, not only where the box is.** The box lives on the list;
+from a ticket or a customer, `/` goes to the list (the same place T goes) and
+puts the caret in the box when it arrives. The legends on those screens offered
+`/` for a while after search moved off the header, and pressing it did nothing.
+The focus is skipped while Turbo shows a cached preview of the list, whose box
+is about to be thrown away.
 
-Three details that are load-bearing:
+### The legend
 
-- **A tap is a Shift on its own**: released with nothing pressed alongside it,
-  and the second press within 750ms of the first. Any other key in between
-  disarms it, so typing `HELLO` can't latch mid-word — and so can `⇧J`, which is
-  a shortcut rather than a tap. Before that second clause, using the keyboard
-  was what made the keyboard unpredictable: `⇧J` armed half a double tap, the
-  next lone Shift completed it, and the one after that undid it.
-- **Focusing any field unlatches.** Escape alone would mean the mode could be
-  the reason a keystroke went missing from a reply.
-- **The latch survives navigation** (`sessionStorage`, per tab). It's a mode, so
-  it stays until you leave it — latch, walk the list, open a ticket, come back,
-  and it's still on. The legend is on screen throughout, which is what makes
-  that honest rather than a trap.
+`?` puts a legend up bottom-left saying what the current screen answers to, and
+`?` puts it away. It **stays up across screens** in between (`sessionStorage`,
+per tab) — you open it to learn the keys, and each screen's are different. It
+takes the accent rule and soft text, the same promotion the rail dot gets when
+a row is selected: while it is up it is the running state of the page rather
+than a passing hint.
+
+A morph refresh would otherwise hide it. The server renders the legend
+`hidden` — it has no idea you put it up — and a broadcast refresh morphs the
+page toward that HTML. The controller cancels `turbo:before-morph-attribute`
+for `hidden` on the legend and its items, so their visibility stays its own.
+
+### Stepping through tickets
+
+**On a ticket, `J` and `K` go to the next and previous ticket in the list it was
+opened from** — that list, in its order, with its filter. Triage is reading one
+ticket after another, and going back to the list between each of them is two
+keys of overhead per ticket.
+
+Opening a row records the tickets on screen alongside the origin (see below).
+The list is a snapshot, not a live query, so closing a ticket as you go doesn't
+pull the next one out from under you. Stepping moves the origin with you, so H
+from wherever you stop goes back to the list you started from, with the cursor
+on the ticket you stopped at. People rows are left out: stepping is ticket to
+ticket. A ticket opened cold has no list, so its legend doesn't offer J/K — the
+`step` target is unhidden only when there are at least two tickets to move
+between.
 
 ### Reaching the results
 
 **While the caret is in the search box, `↓`/`↑` walk the results and `↵` opens
-the highlighted one.** Bare, no modifier, nothing to put down first — `/`, type,
-`↓`, `↵` is the whole path from anywhere to a ticket or a person.
+the highlighted one.** Nothing to put down first — `/`, type, `↓`, `↵` is the
+whole path from anywhere to a ticket or a person.
 
 The list is `fieldKeys` in the controller, kept deliberately separate from
-`keys`, and it is arrows and Enter only:
+`keys`:
 
 - **The letters have to stay letters.** `J`, `K`, `L` and `H` begin Jane, Kevin,
-  Lisa and Harry, which is exactly what someone searching People types. Shift
-  doesn't rescue them — `⇧J` *is* the capital.
+  Lisa and Harry, which is exactly what someone searching People types.
 - **The arrows cost nothing.** In a single-line input `↑`/`↓` only jump the caret
   to an end it is usually already at, and walking a result list with them is
-  what every search box already does. No legend needed for a convention people
-  arrive with.
-- **Enter falls through when nothing is picked**, so the form still submits.
+  what every search box already does.
+- **`↵` with nothing picked, or `Esc` in an empty box, puts the box down**: you
+  have asked your question, and the letters go back to being the list's. `Esc`
+  with something in the box is the search controller's, and clears it first —
+  clearing is not leaving, since you may be about to type a different question.
 
-The cursor still clears on `turbo:frame-render`, so typing another character
+**Putting the box down asks a pending search at once.** The search controller
+flushes its debounce on `focusout`. Left to the timer, the answer would land a
+moment after you had started walking the results and reset the cursor — and
+Enter used to submit the form *and* leave the timer running, so the same query
+went out twice. With nothing pending there is nothing to ask: the results on
+screen already answer what is in the box.
+
+The cursor still clears when the frame re-renders, so typing another character
 drops the highlight — the results underneath it are different ones.
-
-**Shift is the entire guard against firing while someone types.** That is why it
-is worth keeping even though `j` alone would be more idiomatic: the protection is
-a property of the chord rather than a list of elements to remember to exclude,
-so a control added later can't accidentally opt into swallowing keystrokes. (The
-controller checks the event target for a field as well, but that check is the
-belt, not the braces.)
 
 `shortcuts` is mounted on `<body>` in the layout — one controller for the whole
 app — and **each screen declares what it offers by which targets it renders**:
@@ -311,10 +334,11 @@ app — and **each screen declares what it offers by which targets it renders**:
 | Target | Rendered by | Gives |
 | --- | --- | --- |
 | `row` | `tickets/_ticket_row`, `tickets/_person_row` | J / K / L |
-| `back` | the ticket breadcrumb | H |
-| `search` | the header search box | `/` and `?` |
+| `back` | the ticket breadcrumb | H, and J / K between tickets |
+| `search` | the ticket list's search box | `/` focuses it; elsewhere `/` goes to it |
+| `tickets` | the header's nav link | T, and where `/` goes |
 | `hint` | the layout, from `content_for :shortcuts` | the legend |
-| `latch` | the layout | the `Esc Exit` item |
+| `step` | the ticket's legend | the J / K item, shown only with a list behind it |
 
 **The cursor tracks `data-row-id`, not `data-ticket-id`**, because a search list
 holds two kinds of row and a person has no ticket id. Row ids are namespaced —
@@ -340,13 +364,14 @@ from, and a key that picks one of two plausible meanings is worse than a key
 that isn't offered.
 
 **The selection is remembered across the round trip**, in `sessionStorage` under
-`spool:selected-ticket`: open a ticket, press `⇧H`, and you land back on the row
+`spool:selected-ticket`: open a ticket, press `H`, and you land back on the row
 you left rather than at the top of the list. `spool:ticket-origin` remembers the
-list URL alongside it so the filter you were in survives too. Both are per-tab
+list URL alongside it so the filter you were in survives too, and the tickets
+that list showed, which is what J and K step through from a ticket. Both are per-tab
 on purpose: two tabs on two tickets shouldn't fight over one cursor.
 
-**The origin is stored paired with the ticket it belongs to** — `{ticket, url}`,
-not a loose "last list I was on" — and `back()` only uses it when the ticket
+**The origin is stored paired with the ticket it belongs to** — `{ticket, url,
+list}`, not a loose "last list I was on" — and `back()` only uses it when the ticket
 matches, otherwise falling through to the breadcrumb's own href. That pairing
 is load-bearing in two directions, and a loose string was wrong in both:
 
@@ -362,11 +387,18 @@ Restoring is done in `rowTargetConnected`, not in `connect`, because rows come
 and go every time the `ticket_list` frame re-renders.
 
 **A cursor belongs to a list**, so asking a different question starts it at the
-top of the answer. `turbo:frame-render` is the event that means exactly that —
-it fires when the frame is replaced by a new request, which is what a filter
-click and a search both do — and `clearSelection()` hangs off it. Coming back
-from a ticket is a page visit rather than a frame render, so that keeps its
-place, which is the memory anyone actually asked for.
+top of the answer. The frame being replaced by a new request is the moment that
+means exactly that — a filter click and a search both do it — and
+`clearSelection()` hangs off `turbo:before-frame-render`. Coming back from a
+ticket is a page visit rather than a frame render, so that keeps its place,
+which is the memory anyone actually asked for.
+
+*Before*-frame-render, not `turbo:frame-render`: Turbo swaps the new rows in
+and then waits a frame or two before announcing it has rendered. Clearing on
+the announcement undid a key pressed in between — on rows already on screen,
+so you saw the results, pressed `J`, and watched the cursor vanish. A test
+presses `J` from a MutationObserver the moment the rows land, which hits that
+window every time.
 
 Without it the first `J` after a search lands somewhere that depends on whether
 the ticket you were looking at minutes ago happened to survive the narrowing:
@@ -501,8 +533,9 @@ the thread does not stream.
   and being forgotten once it matches the system again, the quoted-text
   disclosure, the template picker not sending, the note toggle hiding the
   recipient, a reply appearing in the thread, and the keyboard — walking the
-  list, opening, coming back to the same row, the legend appearing on a held
-  Shift, and a capital typed in the composer *not* navigating.
+  list, opening, coming back to the same row, stepping ticket to ticket, the
+  legend, and every shortcut key typed into the composer or the search box
+  *not* navigating.
 
 The keyboard tests press keys rather than visiting the destination. That
 distinction is not pedantry: every system test used to reach the thread with

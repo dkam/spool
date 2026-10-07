@@ -99,12 +99,14 @@ model API.
 - [ ] Schedule as a maintenance job
 
 ### Phase 3/4 — MCP
-- [ ] Expose Spool over MCP using the `mcp` gem (~> 1.1), following splat's
+- [x] Expose Spool over MCP using the `mcp` gem (~> 1.1), following splat's
       `app/mcp/splat_mcp_server.rb`
-- [ ] Decide the tool surface: search tickets, read a thread, draft a reply
-- [ ] Auth: splat uses per-user `McpToken` renewed by web activity — copy that
-      shape rather than inventing one
-- [ ] Explicitly deferred until the UI exists
+- [x] Decide the tool surface: search tickets, read a thread, draft a reply
+- [x] Auth: splat uses per-user `McpToken` renewed by web activity — copy that
+      shape rather than inventing one. Copied, minus the renewal: one
+      digest-stored token per agent, rotated from Settings, allowlist
+      re-checked per call. See [mcp.md](mcp.md#the-token)
+- [x] Explicitly deferred until the UI exists
 
 ### Later
 - [ ] AI-assisted reply drafting. Deliberately not now.

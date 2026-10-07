@@ -16,12 +16,31 @@ export default class extends Controller {
   static delay = 220
 
   disconnect() {
-    clearTimeout(this.timer)
+    this.cancel()
   }
 
   schedule() {
+    this.cancel()
+    this.timer = setTimeout(() => this.submit(), this.constructor.delay)
+  }
+
+  // Putting the box down means the question is finished, so one still waiting
+  // out the debounce is asked now. Left to the timer it would land a moment
+  // later — after the arrows or J have started walking the results — and the
+  // new list would reset the cursor. With nothing pending there is nothing to
+  // ask: the results on screen already answer what is in the box.
+  flush() {
+    if (this.timer) this.submit()
+  }
+
+  submit() {
+    this.cancel()
+    this.element.requestSubmit()
+  }
+
+  cancel() {
     clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.element.requestSubmit(), this.constructor.delay)
+    this.timer = null
   }
 
   // Escape empties the box and searches for nothing, which is how you get back
@@ -31,7 +50,7 @@ export default class extends Controller {
     if (!this.hasFieldTarget || this.fieldTarget.value === "") return
 
     event.preventDefault()
-    clearTimeout(this.timer)
+    this.cancel()
     this.fieldTarget.value = ""
 
     // Submitted with the field un-named so it isn't serialised at all, which

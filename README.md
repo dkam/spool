@@ -51,12 +51,12 @@ theme is one attribute on `<html>` that the browser remembers.
 
 ![Search results in the dark theme, showing the People and Tickets sections](docs/images/search-dark.png)
 
-Keyboard, modelled on Basecamp: **hold Shift and the shortcuts are live** —
-`⇧J`/`⇧K` walk the list, `⇧L` opens, `⇧H` goes back, `⇧T` returns to the
-unnarrowed inbox from anywhere, `/` focuses search. Hold Shift for a moment and
-a legend appears saying what the current screen answers to; tap it twice to
-latch the keys unshifted. See [docs/ui.md](docs/ui.md) for the design tokens,
-the screen anatomy and why the latch exists.
+Keyboard, Gmail-style: `j`/`k` walk the list, `l` or Enter opens, and on a
+ticket `j`/`k` step to the next and previous ticket while `h`, Esc or `←` go
+back to the list. `t` returns to the unnarrowed inbox from anywhere, `/` goes
+to search, and `?` shows what the current screen answers to. See
+[docs/ui.md](docs/ui.md) for the design tokens, the screen anatomy and how the
+keys stay out of the way of typing.
 
 ## Status
 

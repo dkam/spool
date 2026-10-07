@@ -2,7 +2,7 @@
 
 <% content_for :shortcuts do %>
   <span class="flex items-center gap-2"><kbd>J</kbd><kbd>K</kbd> Move</span>
-  <span class="flex items-center gap-2"><kbd>L</kbd> Open</span>
+  <span class="flex items-center gap-2"><kbd>L</kbd><kbd>↵</kbd> Open</span>
   <span class="flex items-center gap-2"><kbd>T</kbd> Tickets</span>
   <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
 <% end %>
@@ -32,7 +32,7 @@
         data: {
           controller: "search",
           turbo_frame: "ticket_list",
-          action: "input->search#schedule keydown.esc->search#clear"
+          action: "input->search#schedule keydown.esc->search#clear focusout->search#flush"
         } do |form| %>
     <%# The filters are the list's other narrowing and must survive a search;
         without these, typing in the box would silently drop them. %>

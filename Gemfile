@@ -62,8 +62,9 @@ gem "jwt"
 gem "pagy", "~> 43.0"
 
 # Model Context Protocol server (official Ruby SDK), so agents can drive Spool
-# through typed tools instead of scraping the UI. Served over stdio by bin/mcp;
-# tools live in app/mcp. See docs/mcp.md.
+# through typed tools instead of scraping the UI. Served over HTTP at /mcp with
+# an agent's token, and over stdio by bin/mcp; tools live in app/mcp. See
+# docs/mcp.md.
 gem "mcp"
 
 # Error tracking and light APM, over the Sentry protocol. Inert unless

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_30_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_000001) do
   create_table "agents", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -71,6 +71,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_30_000002) do
     t.string "source", null: false
     t.datetime "updated_at", null: false
     t.index ["source"], name: "index_ingest_cursors_on_source", unique: true
+  end
+
+  create_table "mcp_tokens", force: :cascade do |t|
+    t.integer "agent_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "last_used_at"
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.index ["agent_id"], name: "index_mcp_tokens_on_agent_id", unique: true
+    t.index ["token_digest"], name: "index_mcp_tokens_on_token_digest", unique: true
   end
 
   create_table "message_attachments", force: :cascade do |t|
@@ -168,6 +178,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_30_000002) do
     t.index ["state", "last_activity_at"], name: "index_tickets_on_state_and_last_activity_at"
   end
 
+  add_foreign_key "mcp_tokens", "agents"
   add_foreign_key "message_attachments", "attachments"
   add_foreign_key "message_attachments", "messages"
   add_foreign_key "messages", "agents"

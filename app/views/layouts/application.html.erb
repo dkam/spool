@@ -61,9 +61,9 @@
 
     <%= render "shared/footer" %>
 
-    <%# Shortcut mode: hold Shift for a moment and the screen says what it
-        answers to. The keys work whether or not you wait for this. Screens
-        with nothing to offer render no legend and Shift does nothing. %>
+    <%# The shortcut legend: ? puts it up and ? puts it away, and it stays up
+        across screens in between. The keys work whether or not it is showing.
+        Screens with nothing to offer render no legend and ? does nothing. %>
     <% if content_for?(:shortcuts) %>
       <div data-shortcuts-target="hint" hidden
            class="fixed left-0 bottom-0 z-10 flex items-center gap-5 h-9 px-5
@@ -71,11 +71,7 @@
                   text-2xs uppercase tracking-[0.09em] text-faint">
         <%= yield :shortcuts %>
 
-        <%# Only while latched. Held-Shift needs no exit instructions — you let
-            go. A latch does, and this is the only thing on screen explaining
-            why bare keys are moving the page. %>
-        <span data-shortcuts-target="latch" hidden
-              class="flex items-center gap-2 text-ink"><kbd>Esc</kbd> Exit</span>
+        <span class="flex items-center gap-2 text-ink"><kbd>?</kbd> Hide</span>
       </div>
     <% end %>
   </body>

@@ -12,7 +12,8 @@ module SpoolMcp
         text: {type: "string"},
         agent_email: {
           type: "string",
-          description: "Attribute the note to an existing agent. Omit to write as the MCP stand-in."
+          description: "Who signs the note. Over a token connection it is always the token's agent, and this may only name them. " \
+            "Over the local stdio server it names an existing agent; omit it to write as the MCP stand-in."
         }
       },
       required: ["ticket_id", "text"]
@@ -21,7 +22,7 @@ module SpoolMcp
     class << self
       def call(ticket_id:, text:, agent_email: nil, server_context: nil)
         ticket = Ticket.find(ticket_id)
-        agent = SpoolMcp.author(agent_email)
+        agent = SpoolMcp.author(agent_email, server_context)
 
         # This process runs outside the DatabaseSelector middleware, so it
         # wraps its writes the way jobs do — see ApplicationRecord.writing.

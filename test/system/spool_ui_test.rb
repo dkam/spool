@@ -61,7 +61,7 @@ class SpoolUiTest < ApplicationSystemTestCase
   test "the customer screen offers the keys it actually answers to" do
     visit customer_path(@customer)
 
-    press :shift, "j"
+    press "j"
     assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
 
     assert_selector "[data-shortcuts-target='hint']", visible: :all, text: /Move/
@@ -157,41 +157,66 @@ class SpoolUiTest < ApplicationSystemTestCase
 
   # --- Keyboard -------------------------------------------------------------
 
-  test "shift-gated keys walk the list, open a ticket and come back to it" do
+  test "bare keys walk the list, open a ticket and come back to it" do
     older = Ticket.create!(customer: @customer, subject: "Bounce report",
       state: "open", last_activity_at: 2.hours.ago)
 
     visit root_path
     assert_no_selector "[data-selected]"
 
-    press :shift, "j"
+    press "j"
     assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
 
-    press :shift, "j"
+    press "j"
     assert_selector "a[data-selected][data-ticket-id='#{older.id}']"
 
-    press :shift, "k"
+    press "k"
     assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
 
-    press :shift, "l"
+    press "l"
     assert_selector "h1", text: "Can't connect SMTP"
 
-    press :shift, "h"
+    press "h"
     assert_selector "h1", text: "Tickets"
     # The whole point of remembering: you come back to the row you left, not
     # to the top of the list.
     assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
   end
 
-  test "back returns to the filtered list a ticket was opened from" do
-    visit tickets_path(state: "open")
+  # Shift used to be required. Fingers that learned it shouldn't find the keys
+  # dead now that it isn't.
+  test "the keys still answer with shift held" do
+    visit root_path
 
     press :shift, "j"
-    press :shift, "l"
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
+  end
+
+  test "enter and the right arrow open the selected row" do
+    visit root_path
+    press "j"
+    press :enter
     assert_selector "h1", text: "Can't connect SMTP"
 
-    press :shift, "h"
-    assert_current_path tickets_path(state: "open")
+    visit root_path
+    press "j"
+    press :arrow_right
+    assert_selector "h1", text: "Can't connect SMTP"
+  end
+
+  # H, ← and Escape are one gesture — "out of this ticket" — so any of them
+  # returns to the list, filter and all.
+  test "back returns to the filtered list a ticket was opened from" do
+    ["h", :arrow_left, :escape].each do |key|
+      visit tickets_path(state: "open")
+
+      press "j"
+      press "l"
+      assert_selector "h1", text: "Can't connect SMTP"
+
+      press key
+      assert_current_path tickets_path(state: "open")
+    end
   end
 
   test "a ticket opened cold goes back to the list, not to somewhere it has never been" do
@@ -200,12 +225,12 @@ class SpoolUiTest < ApplicationSystemTestCase
 
     # Leave a filtered list in the tab's memory, recorded against @ticket.
     visit tickets_path(state: "open")
-    press :shift, "j"
-    press :shift, "l"
+    press "j"
+    press "l"
 
     # Now arrive somewhere else the way a pasted link does — no list behind it.
     visit ticket_path(other)
-    press :shift, "h"
+    press "h"
 
     # The breadcrumb falls back to the bare inbox URL, which restores the
     # remembered view — not the row-level history belonging to a different
@@ -213,15 +238,82 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_current_path tickets_path(state: "open")
   end
 
+  # Triage is reading one ticket after another, and going back to the list
+  # between each of them is two keys of overhead per ticket. So on a ticket,
+  # J and K move through the list it was opened from — that list, in its order,
+  # with its filter.
+  test "j and k on a ticket step through the list it was opened from" do
+    Ticket.create!(customer: @customer, subject: "Closed in between",
+      state: "closed", last_activity_at: 1.hour.ago)
+    older = Ticket.create!(customer: @customer, subject: "Bounce report",
+      state: "open", last_activity_at: 2.hours.ago)
+
+    visit tickets_path(state: "open")
+    press "j"
+    press "l"
+    assert_selector "h1", text: "Can't connect SMTP"
+    assert_selector "[data-shortcuts-target='step']:not([hidden])", visible: :all
+
+    # Past the closed ticket, which the list you came from didn't show.
+    press "j"
+    assert_selector "h1", text: "Bounce report"
+
+    press "k"
+    assert_selector "h1", text: "Can't connect SMTP"
+
+    press "j"
+    assert_selector "h1", text: "Bounce report"
+
+    # Back to the list you started from, on the ticket you stepped to rather
+    # than the one you opened.
+    press "h"
+    assert_current_path tickets_path(state: "open")
+    assert_selector "a[data-selected][data-ticket-id='#{older.id}']"
+  end
+
+  # ↑ and ↓ are how you read a long thread. J and K step; the arrows scroll.
+  test "the up and down arrows on a ticket are left to scroll it" do
+    Ticket.create!(customer: @customer, subject: "Bounce report",
+      state: "open", last_activity_at: 2.hours.ago)
+
+    visit root_path
+    press "j"
+    press "l"
+    assert_selector "h1", text: "Can't connect SMTP"
+
+    press :arrow_down
+    sleep 0.3
+    assert_selector "h1", text: "Can't connect SMTP"
+  end
+
+  test "a ticket opened cold has no list to step through, and doesn't offer one" do
+    other = Ticket.create!(customer: @customer, subject: "Bounce report",
+      state: "open", last_activity_at: 2.hours.ago)
+
+    # A list in memory — but recorded for @ticket, not for the one pasted next.
+    visit root_path
+    press "j"
+    press "l"
+    assert_selector "h1", text: "Can't connect SMTP"
+
+    visit ticket_path(other)
+    assert_selector "[data-shortcuts-target='step'][hidden]", visible: :all
+
+    # K would land on @ticket if the other ticket's list answered for this one.
+    press "k"
+    sleep 0.3
+    assert_selector "h1", text: "Bounce report"
+  end
+
   # T is the way out, where H is the way back: it answers "take me to the
   # inbox" without consulting where you have been.
   test "t goes to the ticket list from a ticket and from a customer" do
     visit ticket_path(@ticket)
-    press :shift, "t"
+    press "t"
     assert_selector "h1", text: "Tickets"
 
     visit customer_path(@customer)
-    press :shift, "t"
+    press "t"
     assert_selector "h1", text: "Tickets"
   end
 
@@ -229,7 +321,7 @@ class SpoolUiTest < ApplicationSystemTestCase
     visit tickets_path(state: "closed", q: "outbox")
     assert_selector "[data-shortcuts-target='hint']", visible: :all, text: /Tickets/
 
-    press :shift, "t"
+    press "t"
 
     # T visits the bare inbox URL, and the inbox is wherever you last left it —
     # the narrowing you chose comes back rather than being reset. The chips on
@@ -237,26 +329,66 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_current_path tickets_path(state: "closed", q: "outbox")
   end
 
-  test "typing a capital in the composer is not a shortcut" do
+  # With the keys bare, the field check is the only thing between a shortcut
+  # and a reply. Every key the page answers to has to be a letter in here.
+  test "typing in the composer is not a shortcut" do
     visit ticket_path(@ticket)
 
-    find_field("body").send_keys([:shift, "h"], "old on — checking the logs.")
+    find_field("body").send_keys("hjklt ?/ ", [:shift, "h"], "i")
 
-    assert_field "body", with: /\AHold on/
-    # Shift+H is "go back" everywhere else on this screen. Inside the box it
-    # has to be a letter, or the reply you were writing is gone.
+    assert_field "body", with: "hjklt ?/ Hi"
     assert_selector "h1", text: "Can't connect SMTP"
+    assert_no_selector "[data-shortcuts-target='hint']", visible: true
   end
 
-  test "holding shift says what the screen answers to" do
+  test "escape in the composer stays in the composer" do
+    visit ticket_path(@ticket)
+
+    find_field("body").send_keys("Checking", :escape)
+
+    assert_selector "h1", text: "Can't connect SMTP"
+    assert_field "body", with: "Checking"
+  end
+
+  test "? says what the screen answers to, and ? again puts it away" do
     visit root_path
     assert_no_selector "[data-shortcuts-target='hint']", visible: true
 
-    page.driver.browser.action.key_down(:shift).perform
+    press "?"
     assert_selector "[data-shortcuts-target='hint']", text: /move/i
 
-    page.driver.browser.action.key_up(:shift).perform
+    press "?"
     assert_no_selector "[data-shortcuts-target='hint']", visible: true
+  end
+
+  # You open the legend to learn the keys, and every screen's are different —
+  # so it stays up as you move until you put it away.
+  test "the legend stays up across screens" do
+    visit root_path
+    press "?"
+    press "j"
+    press "l"
+
+    assert_selector "h1", text: "Can't connect SMTP"
+    assert_selector "[data-shortcuts-target='hint']", text: /back/i
+  end
+
+  # New mail refreshes the list by morphing it toward the server's HTML, and
+  # the server has never heard of the cursor or the legend. Both belong to the
+  # page, and neither should vanish because somebody else's email arrived.
+  test "the cursor and the legend survive the page refreshing itself" do
+    visit root_path
+    press "?"
+    press "j"
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
+
+    Ticket.create!(customer: @customer, subject: "Fresh arrival",
+      state: "open", last_activity_at: 1.minute.ago)
+    refresh_like_a_broadcast
+    assert_text "Fresh arrival"
+
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
+    assert_selector "[data-shortcuts-target='hint']", text: /move/i
   end
 
   # --- Search ---------------------------------------------------------------
@@ -283,25 +415,31 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_equal "smtp_tls", find_field("q").value
   end
 
-  test "the search key works shifted or not — they are the same key" do
+  test "/ focuses the search box" do
     visit root_path
 
     press "/"
-    assert_equal "q", evaluate_script("document.activeElement.id")
-
-    find("h1").click
-    assert_not_equal "q", evaluate_script("document.activeElement.id")
-
-    # Shift + the same physical key types "?", which has to land in the same
-    # place or the shortcut works depending on a finger.
-    press :shift, "/"
-    assert_equal "q", evaluate_script("document.activeElement.id")
+    assert_selector "input#q:focus"
   end
 
-  # The latch exists for exactly this: after typing, the caret is in the search
-  # box and every shortcut is correctly suppressed, so there is otherwise no
-  # keyboard route from the box into the results you just asked for.
-  test "double-tapping shift hands the keys back after a search" do
+  # The box lives on the list, so from anywhere else "/" takes you there. The
+  # legends on a ticket and a customer went on offering "/" after the box moved
+  # off the header, and pressing it did nothing.
+  test "/ from a ticket or a customer goes to the list's search box" do
+    visit ticket_path(@ticket)
+    press "/"
+    assert_selector "h1", text: "Tickets"
+    assert_selector "input#q:focus"
+
+    visit customer_path(@customer)
+    press "/"
+    assert_selector "h1", text: "Tickets"
+    assert_selector "input#q:focus"
+  end
+
+  # Typed, the caret is in the box and the letters belong to the query. Enter
+  # is "that's my question": it puts the box down, so J and K walk the answer.
+  test "enter in the search box hands the keys to the results" do
     other = Ticket.create!(customer: @customer, subject: "Invoice for July",
       state: "open", last_activity_at: 1.hour.ago)
     Message.create!(ticket: other, direction: "inbound", message_id: "<in-8@fieldworks.co>",
@@ -311,39 +449,38 @@ class SpoolUiTest < ApplicationSystemTestCase
 
     visit root_path
     fill_in "q", with: "smtp_tls"
-    # Wait on the URL, not on the text: both tickets match, so the text is
-    # already there before the search runs, and a test that doesn't wait for the
-    # response has it land later — on top of a cursor the test has since moved.
-    assert_current_path(/q=smtp_tls/)
-    assert_text "Invoice for July"
+    find_field("q").send_keys(:enter)
+    assert_no_selector "input#q:focus"
 
-    # Still typing: a bare j belongs in the box, not on the page.
-    assert_equal "q", evaluate_script("document.activeElement.id")
-    assert_no_selector "[data-selected]"
+    # Both tickets match, so the rows on screen can't say the answer is in.
+    assert_list_answers "smtp_tls"
 
-    double_tap_shift
-
-    # The box let go, and the legend says why bare keys now do something.
-    assert_not_equal "q", evaluate_script("document.activeElement.id")
-    assert_selector "[data-shortcuts-target='hint'][data-latched]"
-    assert_text(/exit/i)
-
-    # Unshifted now.
     press "j"
     assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
     press "j"
     assert_selector "a[data-selected][data-ticket-id='#{other.id}']"
-
-    press :escape
-    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
-    # And unlatched, a bare j is inert again.
-    press "k"
-    assert_selector "a[data-selected][data-ticket-id='#{other.id}']"
   end
 
-  # Selenium fires two taps within milliseconds; a person tapping a modifier
-  # deliberately is far slower than that, and the window has to fit the hand
-  # rather than the test harness.
+  # A search still waiting out its debounce when the box is put down would land
+  # a moment later — after you have started walking the list — and reset the
+  # cursor. Putting the box down asks the question now.
+  test "putting the search box down asks a pending search at once" do
+    visit root_path
+    press "/"
+    find_field("q").send_keys("smtp_tls")
+    # Measured from the keystroke: well inside the debounce, so without a flush
+    # there would be no request yet.
+    find_field("q").send_keys(:enter)
+    assert_current_path(/q=smtp_tls/)
+
+    # Exactly one request for the query: not a submit and then the debounce
+    # firing behind it, whose answer is the one that resets the cursor.
+    sleep 0.5
+    assert_equal 1, evaluate_script(<<~JS)
+      performance.getEntriesByType("resource").filter((e) => e.name.includes("q=smtp_tls")).length
+    JS
+  end
+
   # A search list holds two kinds of row. The cursor has to walk both, or the
   # People section is visible to the eye and invisible to the keyboard.
   test "j and k walk people as well as tickets in a search" do
@@ -359,25 +496,23 @@ class SpoolUiTest < ApplicationSystemTestCase
     visit tickets_path(q: "dana")
     assert_text(/people/i)
 
-    press :shift, "j"
+    press "j"
     # People are rendered above the tickets, so the first row down is a person.
     assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
 
-    press :shift, "j"
+    press "j"
     assert_selector "a[data-selected][data-row-id='ticket-#{mentioned.id}']"
 
-    press :shift, "k"
+    press "k"
     assert_selector "a[data-selected][data-row-id='customer-#{@customer.id}']"
 
-    press :shift, "l"
+    press "l"
     assert_current_path customer_path(@customer)
   end
 
-  # The route everyone actually takes, and the one that was broken: you have
-  # just typed, so the caret is in the box, and the answer is on screen right
-  # underneath it. ⇧J is no help here — that is how you type a capital J, so the
-  # chord that drives every other list on the site puts a letter in the query
-  # and empties the results you were reaching for.
+  # The route everyone actually takes: you have just typed, so the caret is in
+  # the box, and the answer is on screen right underneath it. The letters are
+  # no help here — they are the query — but the arrows are free.
   test "arrows reach the results without leaving the search box" do
     mentioned = Ticket.create!(customer: @customer, subject: "Signed off",
       state: "open", last_activity_at: 1.hour.ago)
@@ -408,13 +543,14 @@ class SpoolUiTest < ApplicationSystemTestCase
 
   # The reason the letters can't be shortcuts in there. J, K, L and H begin
   # Jane, Kevin, Lisa and Harry, which is exactly what a people search is for.
-  test "a capital letter in the search box is a letter" do
+  test "a letter in the search box is a letter" do
     visit root_path
     press "/"
-    find_field("q").send_keys([:shift, "j"], "ane")
+    find_field("q").send_keys("jane", [:shift, "k"], "?")
 
-    assert_equal "Jane", find_field("q").value
+    assert_equal "janeK?", find_field("q").value
     assert_no_selector "[data-selected]"
+    assert_no_selector "[data-shortcuts-target='hint']", visible: true
   end
 
   # Every other keyboard test here asserts `[data-selected]` — the attribute,
@@ -436,11 +572,11 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_text(/people/i)
     assert_not_equal ACCENT, dot_colour(person)
 
-    press :shift, "j"
+    press "j"
     assert_selector "#{person}[data-selected]"
     assert_equal ACCENT, dot_colour(person)
 
-    press :shift, "j"
+    press "j"
     assert_equal ACCENT, dot_colour(ticket)
     # And the one you left goes back to being an ordinary dot.
     assert_not_equal ACCENT, dot_colour(person)
@@ -460,15 +596,16 @@ class SpoolUiTest < ApplicationSystemTestCase
     # Down onto the ticket that the coming search will also match — the cursor
     # has to survive the narrowing for this to test anything.
     visit root_path
-    press :shift, "j"
-    press :shift, "j"
+    press "j"
+    press "j"
     assert_selector "a[data-selected][data-row-id='ticket-#{mentioned.id}']"
 
     press "/"
     find_field("q").send_keys("dana")
     assert_text(/people/i)
 
-    double_tap_shift
+    find_field("q").send_keys(:enter)
+    assert_no_selector "input#q:focus"
     press "j"
 
     # People are rendered first, so the first row down is a person — whatever
@@ -484,8 +621,8 @@ class SpoolUiTest < ApplicationSystemTestCase
       state: "open", last_activity_at: 2.hours.ago)
 
     visit root_path
-    press :shift, "j"
-    press :shift, "j"
+    press "j"
+    press "j"
     assert_selector "[data-selected]"
 
     click_link "Open"
@@ -493,54 +630,45 @@ class SpoolUiTest < ApplicationSystemTestCase
     assert_no_selector "[data-selected]"
   end
 
-  test "a deliberate, human-paced double tap still latches" do
+  # Turbo swaps the new rows in and then waits a frame or two before it says
+  # it has rendered. Clearing the cursor on that announcement undid any key
+  # pressed in between — on rows that were already on screen. A person sees
+  # the results and presses J; a moment later the cursor is gone.
+  #
+  # Pressed from a MutationObserver, which runs as the rows land and before
+  # Turbo's announcement, so the window is hit every time rather than by luck.
+  test "a key pressed as the new rows appear is not undone a moment later" do
     visit root_path
+    execute_script(<<~JS)
+      const frame = document.getElementById("ticket_list")
+      frame.querySelectorAll("[data-shortcuts-target='row']").forEach((row) => row.dataset.stale = "")
+      new MutationObserver((_, observer) => {
+        if (frame.querySelector("[data-stale]") || !frame.querySelector("[data-shortcuts-target='row']")) return
+        observer.disconnect()
+        document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }))
+        addEventListener("turbo:frame-render", () => document.body.dataset.announced = "", { once: true })
+      }).observe(frame, { childList: true, subtree: true })
+    JS
 
-    double_tap_shift gap: 0.5
-
-    assert_selector "[data-shortcuts-target='hint'][data-latched]"
+    click_link "All"
+    assert_selector "body[data-announced]"
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
   end
 
   # The legend is fixed to the bottom-left corner and the footer keeps the
-  # version and the revision there. Held, that overlap lasts as long as your
-  # thumb; latched, it lasts until you press Escape — so the footer moves.
+  # version and the revision there. It stays up until put away, so the footer
+  # moves rather than sitting underneath it.
   test "the footer makes room for the legend rather than sitting under it" do
     visit root_path
     before = footer_padding_bottom
 
-    double_tap_shift
-    assert_selector "[data-shortcuts-target='hint'][data-latched]"
+    press "?"
+    assert_selector "[data-shortcuts-target='hint']", visible: true
     assert_operator footer_padding_bottom, :>, before
 
-    press :escape
+    press "?"
     assert_no_selector "[data-shortcuts-target='hint']", visible: true
     assert_equal before, footer_padding_bottom
-  end
-
-  # A tap is a Shift on its own. ⇧J is a shortcut, and its release used to arm
-  # the second half of a double tap — so the next lone Shift completed one,
-  # latching the mode, and the one after that unlatched it. Using the keyboard
-  # was the thing that made the keyboard behave unpredictably.
-  test "using a shift shortcut does not prime the latch" do
-    visit root_path
-    press :shift, "j"
-    assert_selector "[data-selected]"
-
-    tap_shift
-    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
-    # Nothing latched, so a bare j is still inert.
-    press "j"
-    assert_selector "a[data-selected][data-row-id='ticket-#{@ticket.id}']"
-  end
-
-  test "typing a capital does not latch shortcut mode" do
-    visit ticket_path(@ticket)
-
-    # Shift, letter, Shift, letter — two Shift presses, but not a double tap.
-    find_field("body").send_keys([:shift, "h"], "ello", [:shift, "t"], "here")
-
-    assert_field "body", with: "HelloThere"
-    assert_no_selector "[data-shortcuts-target='hint'][data-latched]"
   end
 
   test "escape empties the box and gives the list back" do
@@ -552,6 +680,24 @@ class SpoolUiTest < ApplicationSystemTestCase
 
     assert_equal "", find_field("q").value
     assert_no_current_path(/q=/)
+  end
+
+  # Clearing is not leaving — you may be about to type a different question.
+  # Escape in an empty box is: it lets go, and the keys are the list's again.
+  test "escape in an empty search box puts it down" do
+    visit root_path
+    fill_in "q", with: "smtp_tls"
+    assert_list_answers "smtp_tls"
+
+    find_field("q").send_keys(:escape)
+    assert_list_answers nil
+    assert_selector "input#q:focus"
+
+    find_field("q").send_keys(:escape)
+    assert_no_selector "input#q:focus"
+
+    press "j"
+    assert_selector "a[data-selected][data-ticket-id='#{@ticket.id}']"
   end
 
   test "customer notes save themselves" do
@@ -572,16 +718,26 @@ class SpoolUiTest < ApplicationSystemTestCase
     find("body").send_keys(sequence)
   end
 
-  # Two discrete taps, not one hold — the controller times the gap from the
-  # release, so key_up has to happen between them.
-  def double_tap_shift(gap: 0)
-    tap_shift
-    sleep gap
-    tap_shift
+  # Waits for the list to be the answer to `query` — nil for no query at all —
+  # before a key is pressed on it.
+  #
+  # The URL can't say that: Turbo advances it a moment before the new rows
+  # render. Nor can the rows merely having changed: when typing outpaces the
+  # debounce, the answer to part of the word lands first, and a key pressed on
+  # it is reset when the answer to the whole word replaces it, as a new list
+  # should. The chip quoting the query is inside the frame, so it changes
+  # exactly when the answer does.
+  def assert_list_answers(query)
+    within("turbo-frame#ticket_list") do
+      query ? assert_text("“#{query}”") : assert_no_text("“")
+    end
   end
 
-  def tap_shift
-    page.driver.browser.action.key_down(:shift).key_up(:shift).perform
+  # What a `broadcast_refresh` makes the browser do, without the cable: the
+  # test adapter delivers nothing, and this is the call Turbo's stream action
+  # ends in — a morph of the current page.
+  def refresh_like_a_broadcast
+    execute_script("Turbo.session.refresh(document.baseURI)")
   end
 
   def footer_padding_bottom

@@ -2,6 +2,7 @@ class Agent < ApplicationRecord
   has_many :tickets, foreign_key: :assignee_id, dependent: :nullify, inverse_of: :assignee
   has_many :messages, dependent: :nullify
   has_many :ticket_reads, dependent: :delete_all
+  has_one :mcp_token, dependent: :delete
 
   validates :oidc_sub, presence: true, uniqueness: true
   validates :email, presence: true, uniqueness: {case_sensitive: false}

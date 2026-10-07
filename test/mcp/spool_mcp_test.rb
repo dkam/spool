@@ -128,6 +128,26 @@ class SpoolMcpTest < ActiveSupport::TestCase
     end
   end
 
+  # Over HTTP the server is built with the token's agent in its context (see
+  # McpController), and that agent is the author — agent_email can't pick
+  # someone else. Called directly, as the stdio server does, there is none.
+  test "a connected agent writes as itself" do
+    result = payload(SpoolMcp::ReplyToTicket.call(ticket_id: @open.id, text: "On it.",
+      server_context: {agent: @agent}))
+
+    assert_equal "sam@spool.test", Message.find(result[:message_id]).agent.email
+  end
+
+  test "a connected agent can't sign as a colleague" do
+    Agent.create!(oidc_sub: "agent-2", email: "lee@spool.test")
+
+    assert_no_difference "Message.count" do
+      response = SpoolMcp::AddNote.call(ticket_id: @open.id, text: "x", agent_email: "lee@spool.test",
+        server_context: {agent: @agent})
+      assert response.error?
+    end
+  end
+
   test "reply_to_ticket records an outbound reply and hands the ball to the customer" do
     result = payload(
       SpoolMcp::ReplyToTicket.call(ticket_id: @open.id, text: "Fixed — try again?", agent_email: "sam@spool.test")

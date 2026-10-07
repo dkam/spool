@@ -64,6 +64,14 @@
             data-action="theme#choose"
             class="cursor-pointer text-soft hover:text-ink">Dark</button>
 
+    <%# Settings belongs to whoever is here, so current_agent, like the nav —
+        open mode has a stand-in agent with settings of its own. %>
+    <% if current_agent %>
+      <span class="w-px h-3.5 bg-rule"></span>
+      <%= link_to "Settings", settings_path,
+            class: "hover:no-underline #{chip_class(controller_name == "settings")}" %>
+    <% end %>
+
     <% if authenticated? %>
       <span class="w-px h-3.5 bg-rule"></span>
       <%= button_to "Sign out", logout_path, method: :delete,

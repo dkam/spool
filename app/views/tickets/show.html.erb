@@ -1,7 +1,11 @@
 <% content_for :title, "#{ticket_subject(@ticket)} · Spool" %>
 
 <% content_for :shortcuts do %>
-  <span class="flex items-center gap-2"><kbd>H</kbd> Back</span>
+  <%# Only offered when this ticket was opened from a list, which is what J and
+      K step through — the controller unhides it. Opened cold, there is nowhere
+      to step to. %>
+  <span data-shortcuts-target="step" hidden class="flex items-center gap-2"><kbd>J</kbd><kbd>K</kbd> Next / prev</span>
+  <span class="flex items-center gap-2"><kbd>H</kbd><kbd>Esc</kbd> Back</span>
   <span class="flex items-center gap-2"><kbd>T</kbd> Tickets</span>
   <span class="flex items-center gap-2"><kbd>/</kbd> Search</span>
 <% end %>
