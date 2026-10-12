@@ -1,9 +1,9 @@
 # Kamal deployment for Spool. See docs/deploy.md.
 #
-# One image, four containers on one host: web, worker, scheduler, and the tuber
-# accessory. The three app roles run the same image with a different command —
+# One image, three containers on one host: web, worker, and the tuber
+# accessory. The two app roles run the same image with a different command —
 # `bin/docker-entrypoint` runs `db:prepare` only for the web process, so the
-# worker and scheduler can never race it to migrate.
+# worker can never race it to migrate.
 #
 # Every `example.com` below is a placeholder. Nothing here is secret; the
 # secrets are named in `.kamal/secrets` and fetched from your password manager.
@@ -19,11 +19,6 @@ servers:
     hosts:
       - 192.168.0.1
     cmd: bin/worker all
-    proxy: false
-  scheduler:
-    hosts:
-      - 192.168.0.1
-    cmd: bin/scheduler
     proxy: false
 
 # kamal-proxy terminates TLS and gets the certificate from Let's Encrypt.
@@ -134,7 +129,9 @@ builder:
 # Persistence is not optional here: the inbound tube carries email that has
 # been accepted and not yet turned into a ticket, so an in-memory queue loses
 # customer mail on restart. TUBER_BINLOG_DIR turns the WAL on, and tuber
-# refuses to start with persistence enabled and no disk budget.
+# refuses to start with persistence enabled and no disk budget. The binlog also
+# holds the recurring schedule the worker syncs to it (config/schedule.yml),
+# which needs tuber 0.16 or later.
 accessories:
   tuber:
     image: ghcr.io/tuberq/tuber:latest

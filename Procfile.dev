@@ -1,6 +1,5 @@
 web: bin/rails server
 worker: bin/worker all
-scheduler: bin/scheduler
 css: bin/rails tailwindcss:watch
 # Tuber (the work queue) runs in Docker so there's nothing to install. Prefer a
 # native binary? `brew install tuberq/tuber/tuber`, then comment out the docker

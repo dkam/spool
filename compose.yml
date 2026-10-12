@@ -3,10 +3,10 @@
 #   cp .env.example .env    # then fill it in; it explains every value
 #   docker compose up -d
 #
-# The three app containers run the same image with a different command and
-# share one volume. `bin/docker-entrypoint` runs `db:prepare` only for the web
-# process, which is why worker and scheduler wait for web to be healthy: they
-# must never race it to migrate. See docs/deploy.md.
+# The two app containers run the same image with a different command and share
+# one volume. `bin/docker-entrypoint` runs `db:prepare` only for the web
+# process, which is why worker waits for web to be healthy: it must never race
+# it to migrate. See docs/deploy.md.
 #
 # TLS is not optional here, and the app does not degrade gracefully without it.
 # production.rb sets assume_ssl and force_ssl, so — verified against this stack
@@ -20,7 +20,7 @@
 # mapping instead — it must terminate TLS and pass the traffic on.
 name: spool
 
-# Everything the three app containers share. Each declares its own depends_on,
+# Everything the two app containers share. Each declares its own depends_on,
 # because a YAML merge would replace the key rather than add to it.
 x-spool: &spool
   image: ghcr.io/dkam/spool:latest
@@ -54,18 +54,13 @@ services:
       web:
         condition: service_healthy
 
-  scheduler:
-    <<: *spool
-    command: bin/scheduler
-    depends_on:
-      web:
-        condition: service_healthy
-
   # The queue. Persistence is not optional in production: the inbound tube
   # carries mail that has been accepted from the provider and not yet turned
   # into a ticket, so an in-memory queue loses a customer's email on restart
   # with nothing to replay from. TUBER_BINLOG_DIR is what turns the WAL on, and
-  # tuber refuses to start without a disk budget.
+  # tuber refuses to start without a disk budget. The binlog also holds the
+  # recurring schedule the worker syncs to it (config/schedule.yml), which
+  # needs tuber 0.16 or later.
   #
   # No ports: are published on purpose. The app reaches it by service name on
   # the compose network; an exposed 11300 is an unauthenticated queue on the

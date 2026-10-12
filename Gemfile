@@ -28,17 +28,12 @@ gem "solid_cable"
 
 # Tuber/beanstalkd client — a rename of the beaneater fork this used to track,
 # adding reserve_batch and the con:/idp: put options on top of beaneater 1.1.4.
-#
-# Tuber/beanstalkd client — a rename of the beaneater fork this used to track,
-# adding reserve_batch and the con:/idp: put options on top of beaneater 1.1.4.
-# Same dependency splat uses.
+# Same dependency splat uses. 0.7 is the floor for recurring schedules, which
+# replace the old rufus-scheduler process (config/schedule.yml → tuber).
 #
 # Note `::Tuber` is the gem and `Ingest::Tuber` is Spool's wrapper. See
 # docs/queue.md before writing either.
-gem "tuber", "~> 0.5"
-
-# Drives the recurring scheduler (config/schedule.yml → tuber).
-gem "rufus-scheduler", "~> 3.9"
+gem "tuber", "~> 0.7"
 
 # Zstd compression for message headers and bodies, with corpus-trained
 # dictionaries. See docs/compression.md.

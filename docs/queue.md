@@ -12,8 +12,9 @@ fork this used to track, adding `reserve_batch` and the `con:`/`idp:` put
 options on top of beaneater 1.1.4.
 
 Don't resolve `tuber` to `0.0.1` — that version is a name reservation containing
-nothing but a `VERSION` constant, and the constraint is `~> 0.5` to keep the
-floor above it.
+nothing but a `VERSION` constant. The constraint is `~> 0.7`, the first release
+with recurring schedules; the server needs to be tuber 0.16 or later for the
+same reason.
 
 ### `Tuber` means two things
 
@@ -34,7 +35,7 @@ Ingest::Tuber::NotFoundError`, from the error path, in production.
 | `spool.inbound` | `Jmap::Poller` | `Ingest::InboundConsumer` |
 | `spool.outbound` | `Message.compose!` / `outbound:backfill` | `Ingest::OutboundConsumer` |
 | `spool.activejob` | `ActiveJob::QueueAdapters::TuberAdapter` | `Ingest::ActiveJobConsumer` |
-| `spool.maintenance` | `bin/scheduler` | `Ingest::DispatchConsumer` |
+| `spool.maintenance` | tuber's own schedule (`config/schedule.yml`) | `Ingest::DispatchConsumer` |
 
 Inbound and outbound are separate so a provider outage backing up sends can't
 stall ingestion.
@@ -43,8 +44,9 @@ stall ingestion.
 
 ```
 bin/worker [role]     # role: mail | maintenance | all (default all)
-bin/scheduler         # reads config/schedule.yml, puts jobs on their tubes
 ```
+
+There is no scheduler process — see [Recurring jobs](#recurring-jobs).
 
 Roles are defined in `Ingest::Worker::ROLES`. At Spool's scale one process runs
 everything, and `Procfile.dev` starts `all`. The split exists so that in
@@ -114,34 +116,55 @@ Spool's Active Job volume is a handful of jobs a day, and one tube with one
 consumer is easier to reason about. The latency-sensitive work — inbound mail —
 doesn't go through Active Job at all; it has its own tube and consumer.
 
-## Scheduler
+## Recurring jobs
 
-`config/schedule.yml`, read by `bin/scheduler`, which uses rufus-scheduler to
-put `{class:, args:}` bodies onto a tube. `Ingest::DispatchConsumer` drains
+`config/schedule.yml` is the whole set, and tuber runs it. Every worker, at
+boot, syncs the file to tuber under the owner `spool` (`Ingest::Schedule`), and
+tuber puts each entry's `{class:, args:}` body onto its tube when it falls due.
+A fire is an ordinary put. `Ingest::DispatchConsumer` drains
 `spool.maintenance` and calls `#perform` on the named class. These are plain
 classes, not Active Job subclasses — there's no serialisation contract to
 negotiate.
 
-Per-entry options:
+A sync replaces the owner's entire set: an entry deleted from the file is
+deleted from tuber, an edited one is updated in place, and an identical sync
+changes nothing — so two workers booting together is harmless. It happens at
+boot and never on reconnect. During a rolling deploy an old worker re-syncing
+after a tuber blip would put back entries the new release removed.
+
+The sync runs on a thread of its own and waits for tuber as long as it takes,
+the way the consumers do. A schedule tuber *refuses* — a typo'd zone, an unknown
+key in the file, a tuber older than 0.16 — is logged and sent to Sentry, not
+retried. It would only be refused again, and tuber keeps running the schedule it
+already had.
+
+Tuber keeps the schedule in its binlog, so it survives tuber's own restarts
+without waiting for a worker. A tick missed while tuber was down fires once
+for the gap by default (`catchup:`).
+
+Each entry takes exactly one of `every:` (epoch-aligned, with optional
+`offset:`) or `cron:` (UTC unless `zone:` names one), plus:
 
 - **`idp:`** — tuber idempotency key. Until the job holding that key is
-  *deleted*, further puts with it are suppressed — whether the job is ready,
+  *deleted*, further fires with it are suppressed — whether the job is ready,
   reserved, delayed or **buried**. Use on anything that can run longer than its
   own interval; it's what stops a slow JMAP poll from stacking a second poller
   behind the first. The buried case is the trap: a buried `jmap_poll` held its
-  key for six weeks, every put the scheduler logged as "firing" was absorbed by
-  the dead job, and inbound mail stopped. That is why `DispatchConsumer`
-  deletes failed jobs rather than burying them.
+  key for six weeks, every put the old scheduler logged as "firing" was absorbed
+  by the dead job, and inbound mail stopped. That is why `DispatchConsumer`
+  deletes failed jobs rather than burying them. Tuber now counts those absorbed
+  fires per entry as `buried_streak` in its schedule stats.
 - **`con:`** — tuber concurrency key. Caps simultaneous reserves across all
   consumers for jobs sharing the key.
+- **`catchup:`** — `once` (default), `never`, or a number of seconds.
 
-One scheduler process, and if it dies no recurring jobs fire until it restarts.
-That's the trade for not putting a scheduler table in SQLite, and nothing Spool
-schedules is safety-critical — the worst case for a missed poll is that mail
-arrives a minute late.
+To see what tuber holds:
 
-A failed put is logged and swallowed: a scheduler that dies on one bad enqueue
-stops firing everything else.
+```ruby
+c = Ingest::Tuber.producer
+c.schedules.list("spool")
+c.schedules.stats("spool", "jmap_poll")   # next_fire, last_result, buried_streak, ...
+```
 
 ## Health
 

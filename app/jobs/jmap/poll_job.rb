@@ -19,7 +19,7 @@ module Jmap
 
     def perform
       # Absence of a token is the whole switch, the same way SENTRY_DSN is for
-      # error reporting: a checkout with no mail credentials runs the scheduler
+      # error reporting: a checkout with no mail credentials runs the schedule
       # without reaching for a mailbox. Logged at debug rather than warn so an
       # unconfigured development machine isn't noisy about it every 60 seconds.
       unless Poller.configured?

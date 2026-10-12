@@ -9,9 +9,9 @@
 # consumer buries anything, each way mail stops leaves its mark in SQLite:
 #
 #   polling      the poller hasn't completed a clean poll lately — Fastmail is
-#                down, the token was revoked, the scheduler or the worker or
-#                tuber itself is down, or one message can't be fetched and is
-#                holding the cursor.
+#                down, the token was revoked, the worker or tuber itself is
+#                down, or one message can't be fetched and is holding the
+#                cursor.
 #   failed       a message reached Spool and was given up on (DroppedMail).
 #   undelivered  a reply was composed and hasn't gone out.
 #

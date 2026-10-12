@@ -106,17 +106,20 @@ reasoned about.
 
 ## The image
 
-One image, three processes. Kamal runs the same image per role with a different
+One image, two processes. Kamal runs the same image per role with a different
 command, so a wedged consumer restarts without dropping requests.
 
 ```
 web        ./bin/thrust ./bin/rails server     (the default CMD)
 worker     ./bin/worker all                    (or: mail | maintenance)
-scheduler  ./bin/scheduler
 ```
 
+There is no scheduler process. Each worker syncs `config/schedule.yml` to tuber
+at boot and tuber fires the recurring jobs itself — see
+[queue.md](queue.md#recurring-jobs).
+
 `bin/docker-entrypoint` runs `db:prepare` **only** for the web process, so the
-worker and scheduler never race it to migrate.
+worker never races it to migrate.
 
 `bin/build` builds it locally the way both workflows do. The one thing it adds
 over `docker build .` is `--build-arg GIT_SHA`, without which the Dockerfile's
@@ -133,7 +136,7 @@ Two deliberate departures from the generated Dockerfile:
 
 ## Deploying it
 
-`config/deploy.yml` is the deployment: three roles running the same image with
+`config/deploy.yml` is the deployment: two roles running the same image with
 different commands, one `spool_storage` volume, and tuber as an accessory on the
 same host. Kamal builds from the working tree and pushes to the same repository
 the release workflow publishes to, distinguished by tag — Kamal pushes the git
@@ -148,9 +151,9 @@ bin/kamal console
 
 Four decisions in that file are load-bearing and none is the generated default:
 
-- **`proxy: false` on worker and scheduler.** They serve nothing. Proxied, they
-  would be health-checked on a port nothing listens on and the deploy would fail
-  waiting for them.
+- **`proxy: false` on the worker.** It serves nothing. Proxied, it would be
+  health-checked on a port nothing listens on and the deploy would fail waiting
+  for it.
 - **`assume_ssl` and `force_ssl` are on in `production.rb`** because
   kamal-proxy terminates TLS and forwards plain HTTP over the docker network.
   Turning the proxy's SSL off means turning both of those off in the same
@@ -161,22 +164,26 @@ Four decisions in that file are load-bearing and none is the generated default:
   for `spool.activejob` and wrong for `spool.inbound`: that tube carries mail
   that has been accepted from the provider and not yet turned into a ticket, so
   losing it on restart loses a customer's email with nothing to replay from.
+  The binlog also keeps the recurring schedule across tuber restarts, so jobs
+  keep firing without waiting for a worker to re-sync. The schedule needs tuber
+  0.16 or later; an older one refuses the sync, and the worker logs and reports
+  it to Sentry.
 - **No `port:` on the accessory.** The app reaches tuber by container name on
   the Kamal network; an exposed 11300 is an unauthenticated queue on the
   internet.
 
 ## Without Kamal
 
-`compose.yml` is the same four containers plus Caddy for TLS, pulling the
+`compose.yml` is the same three containers plus Caddy for TLS, pulling the
 published image rather than building. `.env.example` documents every variable
 and is the only place the configuration is written down; `cp .env.example .env`
 is the whole setup step.
 
 Two things it encodes that a hand-rolled version usually gets wrong:
 
-- **Worker and scheduler wait on web's healthcheck**, because `db:prepare` runs
-  only for the web process. Started together, the other two would come up
-  against a database that does not exist yet.
+- **The worker waits on web's healthcheck**, because `db:prepare` runs only for
+  the web process. Started together, it would come up against a database that
+  does not exist yet.
 - **`SPOOL_HOST` drives both Caddy's certificate and the app's absolute URLs**,
   from one variable, so they cannot disagree. When they do, the symptom is an
   OIDC `redirect_uri` mismatch reported by the provider — which reads like a

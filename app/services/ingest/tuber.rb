@@ -19,7 +19,8 @@ module Ingest
     # backing up sends can't stall ingestion.
     OUTBOUND_TUBE = "spool.outbound"
 
-    # Recurring work pushed by bin/scheduler from config/schedule.yml.
+    # Recurring work: tuber fires config/schedule.yml's entries here (see
+    # Ingest::Schedule).
     MAINTENANCE_TUBE = "spool.maintenance"
 
     # Everything enqueued through Active Job (deliver_later, perform_later).

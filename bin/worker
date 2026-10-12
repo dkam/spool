@@ -23,5 +23,10 @@ end
 trap("INT") { shutdown.call("SIGINT") }
 trap("TERM") { shutdown.call("SIGTERM") }
 
+# Hand config/schedule.yml to tuber, which runs the recurring jobs. On a thread
+# of its own because it waits for tuber to come up, and nothing waits on it:
+# the process exits when the consumers do. See Ingest::Schedule.
+Thread.new { Ingest::Schedule.sync_at_boot }
+
 Rails.logger.info "[Worker:#{role}] starting #{consumers.size} consumer(s)"
 consumers.map { |c| Thread.new { c.run } }.each(&:join)

@@ -68,7 +68,7 @@ exist yet.
 | --- | --- |
 | Ingest — threading, MIME splitting, loop rejection, dedup | done |
 | Storage — SQLite, zstd, FTS5, attachments | done |
-| Queue — tuber, consumers, scheduler, Active Job adapter | done |
+| Queue — tuber, consumers, recurring schedule, Active Job adapter | done |
 | Auth — OIDC, allowlist, sessions | done |
 | UI — ticket list, thread, customer, search | done |
 | Inbound — JMAP poller (Fastmail), folder-as-queue | done |
@@ -88,7 +88,7 @@ tuberq/tuber/tuber` works instead — see `Procfile.dev`).
 ```bash
 bin/setup --skip-server  # bundle, prepare the databases
 bin/rails db:seed        # the worked example the screenshots above are taken from
-bin/dev                  # web + worker + scheduler + tailwind + tuber
+bin/dev                  # web + worker + tailwind + tuber
 ```
 
 Then open http://localhost:3000. With no OIDC provider configured Spool runs
@@ -140,15 +140,17 @@ loudly at startup.
 
 ## Deployment
 
-One image, three processes, one host. `bin/docker-entrypoint` runs `db:prepare`
-only for the web process, so the worker and scheduler can never race it to
-migrate.
+One image, two processes, one host. `bin/docker-entrypoint` runs `db:prepare`
+only for the web process, so the worker can never race it to migrate.
 
 ```
 web        ./bin/thrust ./bin/rails server     (the default CMD)
 worker     ./bin/worker all                    (or: mail | maintenance)
-scheduler  ./bin/scheduler
 ```
+
+Recurring jobs have no process of their own: the worker syncs
+`config/schedule.yml` to tuber at boot and tuber fires them, which needs tuber
+0.16 or later.
 
 Images are published to `ghcr.io/dkam/spool` by a version bump on `main` —
 editing `Spool::VERSION` in `config/version.rb` *is* the release, and the
@@ -157,7 +159,7 @@ opens the GitHub Release. See [docs/deploy.md](docs/deploy.md).
 
 ### With Kamal
 
-`config/deploy.yml` describes the whole deployment: the three roles, the
+`config/deploy.yml` describes the whole deployment: the two roles, the
 `spool_storage` volume that holds the SQLite file, the tuber accessory with its
 WAL turned on, and the environment above. Fill in the host, the proxy hostname
 and your provider, put the secrets where `.kamal/secrets` expects them, then:
@@ -212,7 +214,7 @@ bin/build            # builds ghcr.io/dkam/spool:vX.Y.Z locally, with GIT_SHA ba
 `GIT_SHA` is what a running container reports as its revision, which is how you
 answer "is what I built actually running?" — `docker build .` on its own leaves
 it `unknown`. Point `compose.yml`'s image at what you built, or run the four
-containers by hand: tuber, then web, worker and scheduler sharing one
+containers by hand: tuber, then web and worker sharing one
 `spool_storage` volume, with `TUBER_URL=tuber:11300` in the environment.
 
 `storage/` is the entire backup surface. Only `production.sqlite3` matters —

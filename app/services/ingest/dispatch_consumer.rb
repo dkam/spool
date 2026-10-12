@@ -3,9 +3,10 @@
 module Ingest
   # Drains a tube whose bodies look like `{ "class": "Foo::BarJob", "args": [] }`,
   # instantiates the class and calls #perform(*args). Used for spool.maintenance,
-  # where bin/scheduler pushes the recurring jobs from config/schedule.yml.
+  # where tuber fires the recurring jobs from config/schedule.yml (see
+  # Ingest::Schedule).
   #
-  # These are plain classes, not ActiveJob subclasses — the scheduler names them
+  # These are plain classes, not ActiveJob subclasses — the schedule names them
   # by string and there's no serialisation to negotiate.
   #
   # A failed job is deleted, not retried and never buried. The schedule is the
@@ -14,7 +15,8 @@ module Ingest
   # job's `idp:` key live, so every later put with that key is suppressed as a
   # duplicate of the dead job. That is how one Fastmail outage buried
   # Jmap::PollJob and stopped inbound mail for six weeks while the scheduler
-  # kept logging that it was firing it.
+  # kept logging that it was firing it. (Tuber's own schedule stats count these
+  # suppressed fires as `buried_streak`.)
   class DispatchConsumer < TubeConsumer
     def initialize(tube:, batch_size: 5)
       super

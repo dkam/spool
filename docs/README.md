@@ -17,7 +17,7 @@ recorded here, change the document in the same commit.
 | [ingest.md](ingest.md) | Inbound mail: rejection, threading, MIME splitting, idempotency |
 | [outbound.md](outbound.md) | Outbound mail: Mailgun, the delivery queue, delivered_at, backfill |
 | [compression.md](compression.md) | zstd layer, dictionaries, when and how to train them |
-| [queue.md](queue.md) | Tuber, consumers, the scheduler, the Active Job adapter |
+| [queue.md](queue.md) | Tuber, consumers, the recurring schedule, the Active Job adapter |
 | [auth.md](auth.md) | OIDC, the allowlist, the three configuration states |
 | [tags.md](tags.md) | Ticket tags, the spam tag, blocked senders, what the inbox hides |
 | [ui-contract.md](ui-contract.md) | The model API the views are built against |
@@ -41,7 +41,7 @@ difficulty and 20% of the code.
 
 ```bash
 bin/setup           # bundle, prepare databases
-bin/dev             # web + worker + scheduler + tailwind + tuber (Procfile.dev)
+bin/dev             # web + worker + tailwind + tuber (Procfile.dev)
 bin/rails test      # the suite
 bin/rails test:system
 bin/standardrb      # style; --fix to autocorrect

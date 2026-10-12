@@ -89,17 +89,17 @@ COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --chown=rails:rails --from=build /rails /rails
 
 # Entrypoint prepares the database — but only for the web process, so the
-# worker and scheduler roles below never race it to run migrations.
+# worker role below never races it to run migrations.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
-# One image, three processes. Kamal runs the same image with a different CMD
-# per role; the queue consumers and the scheduler are separate containers, not
-# threads inside Puma, so a wedged consumer can be restarted without dropping
-# requests.
+# One image, two processes. Kamal runs the same image with a different CMD per
+# role; the queue consumers are a separate container, not threads inside Puma,
+# so a wedged consumer can be restarted without dropping requests. Recurring
+# jobs need no process of their own: tuber runs the schedule the worker syncs
+# to it at boot.
 #
 #   web        ./bin/thrust ./bin/rails server   (the default, below)
 #   worker     ./bin/worker all                  (or: mail | maintenance)
-#   scheduler  ./bin/scheduler
 #
 # See docs/queue.md for what each role consumes.
 EXPOSE 80

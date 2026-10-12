@@ -6,8 +6,8 @@ require_relative "../../support/fake_tuber_job"
 # What happens to a scheduled job once it has run, and above all once it has
 # failed.
 #
-# Everything on spool.maintenance was put there by bin/scheduler, and the
-# schedule already runs it again. The production incident this guards against:
+# Everything on spool.maintenance was put there by the schedule, which already
+# runs it again. The production incident this guards against:
 # a Fastmail outage failed Jmap::PollJob five times, the consumer buried it, and
 # tuber went on treating the buried job as the live holder of its `idp:jmap_poll`
 # key. Every later put was suppressed as a duplicate, so the scheduler kept

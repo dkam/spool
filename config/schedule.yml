@@ -1,14 +1,25 @@
-# Recurring jobs, read by bin/scheduler. Each entry pushes
+# Recurring jobs. Each worker syncs this whole file to tuber at boot (see
+# Ingest::Schedule), and tuber puts
 #   { "class": "<class name>", "args": [] }
-# onto the named tube on the given schedule; Ingest::DispatchConsumer drains
-# spool.maintenance and calls #perform on the named class.
+# onto the named tube when an entry falls due; Ingest::DispatchConsumer drains
+# spool.maintenance and calls #perform on the named class. An entry deleted
+# here is deleted from tuber at the next worker boot.
 #
-# schedule: rufus syntax — "every Xs/Xm/Xh" or "cron <expr>".
+# Give exactly one of:
+# every:    an interval aligned to the Unix epoch — "60s", "10m", "1h", "1d".
+#           offset: shifts it ("5m").
+# cron:     5-field cron, in UTC unless zone: names an IANA zone.
+#
+# Optional:
+# idp:      tuber idempotency key — while a job with this key is in the tube
+#           (ready, reserved or buried), further fires are suppressed. Use on
+#           anything that can run longer than its own interval.
 # con:      tuber concurrency key — caps simultaneous reserves across all
 #           consumers for jobs sharing the key.
-# idp:      tuber idempotency key — while a job with this key is in the tube
-#           (ready or reserved), further puts with it are suppressed. Use on
-#           anything that can run longer than its own interval.
+# catchup:  for ticks missed while tuber was down: once (the default) fires once
+#           for the gap, never skips them, a number of seconds fires only if
+#           that late at most.
+# args:     passed to #perform. Defaults to [].
 #
 # See docs/queue.md.
 
@@ -22,7 +33,7 @@
 jmap_poll:
   class: Jmap::PollJob
   tube: spool.maintenance
-  schedule: every 60s
+  every: 60s
   idp: jmap_poll
 
 # Sweep OIDC session mappings whose expiry has passed. Cheap: one indexed
@@ -30,5 +41,5 @@ jmap_poll:
 cleanup_expired_oidc_sessions:
   class: CleanupExpiredOidcSessionsJob
   tube: spool.maintenance
-  schedule: cron 17 * * * *
+  cron: "17 * * * *"
   con: 1
