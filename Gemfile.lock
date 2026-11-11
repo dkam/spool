@@ -234,7 +234,7 @@ GEM
       validate_url
       webfinger (~> 2.0)
     ostruct (0.6.3)
-    pagy (43.8.1)
+    pagy (43.8.2)
       json
       uri
       yaml
@@ -463,7 +463,7 @@ DEPENDENCIES
   mail
   mcp
   openid_connect
-  pagy (~> 43.0)
+  pagy (~> 43.8)
   propshaft
   puma (>= 5.0)
   rails (~> 8.1.4)
@@ -565,7 +565,7 @@ CHECKSUMS
   nokogiri (1.19.7-x86_64-linux-musl) sha256=464d1f3dfb0d53cf54c0c6a7e23e8e91cf68ec3cafc2b27dc4a7682f2d9bf546
   openid_connect (2.5.0) sha256=659aff8edce0907798e3f6837e5f27ae2937ae8735216f3e900ab8daa29e39c4
   ostruct (0.6.3) sha256=95a2ed4a4bd1d190784e666b47b2d3f078e4a9efda2fccf18f84ddc6538ed912
-  pagy (43.8.1) sha256=8f136a4bded93b04c87bc385e8be24c8b5adbaab1c0fac1c4c0c63eddae9c2ff
+  pagy (43.8.2) sha256=3c2b4621c4b5dc2023a8909a5cb7bf29b37ff1e3773a07c192782ae16f2716c6
   parallel (2.3.0) sha256=f75a3e904101ce6a1ccb6b8dc800cbafd42166d83330192438dcf29395167a6f
   parser (3.3.13.0) sha256=e02f9b63c2fe05b0c68f692ba4df89b3cb113b663964f75d988fbebfd6c3deca
   pp (0.6.4) sha256=dfcb0fce700c41456265922884f9fe195d7fbb0674a3578e6c0f69588e82b570
