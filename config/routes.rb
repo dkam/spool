@@ -21,7 +21,11 @@ Rails.application.routes.draw do
   root "tickets#index"
 
   resources :tickets, only: %i[index show update] do
-    resources :messages, only: %i[create], shallow: true
+    resources :messages, only: %i[create], shallow: true do
+      # Stop trying to deliver a reply that hasn't gone. Shallow, so it's
+      # /messages/:id/give_up — a message id is all it needs.
+      post :give_up, on: :member
+    end
 
     # One path, two verbs: POST marks spam (tag + block the sender), DELETE
     # takes it back. Not folded into #update — spam is a paired write the

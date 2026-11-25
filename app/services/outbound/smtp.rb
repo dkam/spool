@@ -37,6 +37,17 @@ module Outbound
       Net::SMTPUnsupportedCommand
     ].freeze
 
+    # The RFC 3463 enhanced status codes that put the fault in the recipient's
+    # address: X.1.1 no such mailbox, X.1.2 no such domain, X.1.3 bad syntax,
+    # X.1.6 mailbox moved, X.1.10 null MX, X.2.1 mailbox disabled. Gmail
+    # answers multi-line, so the basic code may be followed by a hyphen.
+    #
+    # The enhanced code is the only reliable signal. Net::SMTP doesn't say
+    # which command was refused, and a bare "550" could be the recipient, our
+    # sender address or our content — so a reply without one stays a plain
+    # Rejected, which the header keeps showing until someone looks.
+    RECIPIENT_REFUSAL = /\A5\d\d[ -]5\.(?:1\.(?:1|2|3|6|10)|2\.1)\b/
+
     def self.configured?
       ENV["SMTP_ADDRESS"].present?
     end
@@ -92,6 +103,9 @@ module Outbound
       response = mail.deliver!
       response.to_s.presence || "sent"
     rescue *PERMANENT_ERRORS => e
+      reply = e.message.to_s.strip
+      raise RecipientRejected, reply if e.is_a?(Net::SMTPFatalError) && reply.match?(RECIPIENT_REFUSAL)
+
       raise Rejected.new("SMTP refused: #{e.class}: #{e.message}")
     end
     # Transient errors (Net::SMTPServerBusy 421, Net::ProtoRetriableError,

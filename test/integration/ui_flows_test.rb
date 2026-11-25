@@ -272,6 +272,72 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     assert_match "Internal note · not sent to the customer", response.body
   end
 
+  # Ticket #53: the reply sat there saying "Queued" while the header said
+  # "1 reply not delivered", and the reason was only in the worker's log.
+  test "a refused reply says so in the thread, with the server's reason under it" do
+    reply = Message.compose!(ticket: @ticket, agent: agent, text: "Fixed it.")
+    reply.update!(delivery_failed_at: Time.current,
+      delivery_error: "550 5.1.1 <dana@fieldworks.co>: Recipient address rejected: User unknown")
+
+    get ticket_path(@ticket)
+
+    assert_response :success
+    assert_select "#message-#{reply.id}" do
+      assert_select "header", text: /Not delivered/
+      assert_select "header", text: /Queued/, count: 0
+      assert_select "*", text: /Recipient address rejected: User unknown/
+      # Nothing left to give up on.
+      assert_select "form[action=?]", give_up_message_path(reply), count: 0
+    end
+  end
+
+  test "a reply that hasn't gone shows its last error and offers to give up on it" do
+    stuck = Message.compose!(ticket: @ticket, agent: agent, text: "Still trying.")
+    stuck.update!(delivery_error: "Net::SMTPServerBusy: 421 4.3.2 try later")
+    fresh = Message.compose!(ticket: @ticket, agent: agent, text: "Just sent.")
+
+    get ticket_path(@ticket)
+
+    assert_select "#message-#{stuck.id}" do
+      assert_select "header", text: /Queued · not yet delivered/
+      assert_select "*", text: /421 4\.3\.2 try later/
+      assert_select "form[action=?] button", give_up_message_path(stuck), text: "Give up"
+    end
+    # Seconds old with nothing wrong: it's on its way, not stuck.
+    assert_select "#message-#{fresh.id} form[action=?]", give_up_message_path(fresh), count: 0
+  end
+
+  test "a reply that has waited past the header's grace offers to give up, error or not" do
+    old = Message.compose!(ticket: @ticket, agent: agent, text: "Composed before delivery existed.")
+    old.update!(sent_at: 20.minutes.ago)
+
+    get ticket_path(@ticket)
+
+    assert_select "#message-#{old.id} form[action=?]", give_up_message_path(old)
+  end
+
+  test "giving up on a reply stops it being sent and says who gave up" do
+    stuck = Message.compose!(ticket: @ticket, agent: agent, text: "Still trying.")
+
+    post give_up_message_path(stuck)
+
+    assert_redirected_to ticket_path(@ticket, anchor: "message-#{stuck.id}")
+    assert stuck.reload.undeliverable?
+    assert_equal "Given up by Development Agent", stuck.delivery_error
+    assert_empty Message.awaiting_delivery
+  end
+
+  test "a reply that already went can't be given up on" do
+    sent = Message.compose!(ticket: @ticket, agent: agent, text: "Went.")
+    sent.update!(delivered_at: Time.current)
+
+    post give_up_message_path(sent)
+
+    assert_redirected_to ticket_path(@ticket, anchor: "message-#{sent.id}")
+    assert_equal "That reply isn't waiting to be delivered.", flash[:alert]
+    assert_not sent.reload.undeliverable?
+  end
+
   # --- Composing ------------------------------------------------------------
 
   test "sending a reply writes an outbound message and hands the ball back" do

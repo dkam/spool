@@ -24,9 +24,47 @@ class Message < ApplicationRecord
   scope :notes, -> { where(direction: "note") }
   scope :emailed, -> { where(direction: %w[inbound outbound]) }
 
+  # Replies that haven't gone and still might: not delivered, and neither
+  # refused nor given up on. What the header counts and the backfill queues.
+  scope :awaiting_delivery, -> { outbound.where(delivered_at: nil, delivery_failed_at: nil) }
+  scope :undeliverable, -> { outbound.where.not(delivery_failed_at: nil) }
+
+  # Raised by #give_up_delivery! on anything that isn't a reply still waiting.
+  class NotAwaitingDelivery < StandardError; end
+
   def inbound? = direction == "inbound"
   def outbound? = direction == "outbound"
   def note? = direction == "note"
+
+  def awaiting_delivery? = outbound? && delivered_at.nil? && delivery_failed_at.nil?
+  def undeliverable? = delivery_failed_at.present?
+
+  # The recipient's mail server refused this reply's address — called by
+  # Outbound::Delivery with the server's own words. The reply will never go,
+  # and the customer is still waiting on an answer they won't get, so the
+  # ticket comes back to the inbox, tagged, as news: what an agent does next
+  # (find another address, or close it) is a human call.
+  def refused!(reason, at: Time.current)
+    transaction do
+      update!(delivery_failed_at: at, delivery_error: reason)
+      ticket.reply_refused!(at)
+    end
+  end
+
+  # An agent deciding a stuck reply is never going to go — an address the
+  # SMTP classifier didn't recognise as bad, a test send, a reply that is
+  # stale by now. A decision rather than news, so the ticket stays where the
+  # agent put it. The last error the send hit is kept after the signature.
+  def give_up_delivery!(agent:, at: Time.current)
+    raise NotAwaitingDelivery, "message #{id} isn't a reply waiting to be delivered" unless awaiting_delivery?
+
+    reason = ["Given up by #{agent.display_name}", delivery_error.presence].compact.join(". Last attempt: ")
+    transaction do
+      update!(delivery_failed_at: at, delivery_error: reason)
+      # The ticket row is the broadcast signal; see Ticket.
+      ticket.touch
+    end
+  end
 
   # `body` holds a JSON document, not display text: a message legitimately has
   # both a text/plain and a text/html rendering and discarding either loses

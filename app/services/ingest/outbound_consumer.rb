@@ -37,7 +37,9 @@ module Ingest
         # None of these change on retry — a body that doesn't parse, a message
         # that doesn't exist, a message that can never be sent, or a transport
         # that looked at this exact send and refused it (bad key, unknown
-        # domain, refused recipient, permanent SMTP failure).
+        # domain, a recipient it won't name the reason for, permanent SMTP
+        # failure). A recipient address the server says is bad never gets
+        # here: Delivery marks that reply undeliverable and returns :refused.
         log_exception("[OutboundConsumer] undeliverable", e)
         safe_finalize(job, :give_up, e)
       rescue => e

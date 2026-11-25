@@ -15,7 +15,9 @@ namespace :outbound do
             "or MAILGUN_API_KEY + MAILGUN_DOMAIN + SPOOL_MAILBOX for Mailgun."
     end
 
-    undelivered = Message.outbound.where(delivered_at: nil).chronological
+    # Never a reply the recipient's server refused — that only sends it back
+    # to the address that refused it — or one an agent gave up on.
+    undelivered = Message.awaiting_delivery.chronological
     puts "Queueing #{undelivered.count} undelivered outbound message(s)…"
 
     undelivered.each do |message|

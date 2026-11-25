@@ -84,16 +84,36 @@ module Outbound
     # The stamp is written after the transport accepts, so the crash window is
     # "accepted but not stamped" — a possible duplicate email, never a lost
     # one, which is the right side to err on.
+    #
+    # A reply refused or given up on is skipped the same way, so a job still
+    # on the tube when an agent gives up never sends.
+    #
+    # When the recipient's server refuses the address, the reply is marked
+    # undeliverable and this returns :refused rather than raising: nothing
+    # went wrong on our side, and nothing will be retried. Any other failure
+    # is recorded on the reply for the thread to show, then raised for the
+    # consumer to retry or give up on.
     def deliver!(message, transport: self.transport)
       raise NotDeliverable, "message #{message.id} is #{message.direction}, not outbound" unless message.outbound?
       return :already_delivered if message.delivered_at
+      return :undeliverable if message.undeliverable?
 
       to = message.ticket.customer.email
       raise NotDeliverable, "ticket #{message.ticket_id}'s customer has no email address" if to.blank?
       raise NotConfigured, "set SMTP_ADDRESS + SPOOL_MAILBOX for SMTP, or MAILGUN_API_KEY + MAILGUN_DOMAIN + SPOOL_MAILBOX for Mailgun" unless configured?
 
-      provider_id = transport.deliver_mime(to: to, mime: mime_for(message).to_s)
-      message.update!(delivered_at: Time.current)
+      begin
+        provider_id = transport.deliver_mime(to: to, mime: mime_for(message).to_s)
+      rescue RecipientRejected => e
+        message.refused!(e.message.truncate(ERROR_LENGTH))
+        Rails.logger.warn "[Outbound::Delivery] message #{message.id} refused by #{to}'s mail server: #{e.message}"
+        return :refused
+      rescue => e
+        record_error(message, e)
+        raise
+      end
+
+      message.update!(delivered_at: Time.current, delivery_error: nil)
       # The ticket row is the broadcast signal (see Ticket) and a delivery
       # writes nothing else on it, so touch it: the thread rendered right
       # after Send refreshes out of "Queued · not yet delivered".
@@ -122,6 +142,22 @@ module Outbound
 
     def transport_name(transport)
       transport.class.name.demodulize.downcase
+    end
+
+    # A server reply or exception message is short; a provider's error body
+    # quoted back in full is not.
+    ERROR_LENGTH = 1000
+
+    # The reason this attempt didn't go, on the reply, so the thread can say
+    # why it's still queued. A Rejected's message already names the transport
+    # and error; anything else (a timeout, a 421) needs its class to make
+    # sense. Never allowed to mask the error being recorded.
+    def record_error(message, error)
+      text = error.is_a?(Rejected) ? error.message : "#{error.class}: #{error.message}"
+      message.update!(delivery_error: text.truncate(ERROR_LENGTH))
+      message.ticket.touch
+    rescue => e
+      Rails.logger.error "[Outbound::Delivery] couldn't record the error on message #{message.id}: #{e.class}: #{e.message}"
     end
   end
 end

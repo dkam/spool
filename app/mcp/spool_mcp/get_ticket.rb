@@ -34,6 +34,12 @@ module SpoolMcp
           sent_at: message.sent_at&.utc&.iso8601,
           # Only ever present on outbound messages; compact drops it elsewhere.
           delivered_at: message.delivered_at&.utc&.iso8601,
+          # Set when the reply will never go: the recipient's server refused
+          # the address, or an agent gave up on it.
+          delivery_failed_at: message.delivery_failed_at&.utc&.iso8601,
+          # Why it hasn't gone — the server's reply, who gave up, or the last
+          # attempt's error while it's still being retried.
+          delivery_error: message.delivery_error,
           # The plain-text rendering; an HTML-only message falls back to its
           # quote-stripped excerpt rather than handing raw HTML to an agent.
           body: message.body_text || message.body_excerpt

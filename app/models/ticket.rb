@@ -208,4 +208,15 @@ class Ticket < ApplicationRecord
   def record_outbound_activity!(at)
     update!(state: "pending", last_activity_at: at)
   end
+
+  # A reply on this ticket was refused by the customer's mail server, so the
+  # ball never reached them. Back to open, and as fresh activity — unread,
+  # at the top of the inbox — the same as a reply from the customer would
+  # be. The tag says why it's back, and stays as a filter after it closes.
+  def reply_refused!(at)
+    transaction do
+      tag!(Tag::UNDELIVERABLE)
+      update!(state: "open", last_activity_at: at)
+    end
+  end
 end

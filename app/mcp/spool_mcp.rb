@@ -34,7 +34,7 @@ module SpoolMcp
     MCP::Server.new(
       name: "spool",
       version: Spool::VERSION,
-      tools: [ListTickets, GetTicket, AddNote, ReplyToTicket, UpdateTicket, MailStatus],
+      tools: [ListTickets, GetTicket, AddNote, ReplyToTicket, UpdateTicket, GiveUpReply, MailStatus],
       server_context: {agent: agent},
       configuration: MCP::Configuration.new(exception_reporter: method(:report_exception)),
       instructions: <<~TEXT
@@ -60,7 +60,14 @@ module SpoolMcp
         When mail seems to be missing — "why isn't this email in Spool?" —
         call mail_status. It says whether the mailbox is being polled, how far
         it has read, and lists mail that arrived but was turned away (bulk,
-        auto-replies, lists) or given up on, plus replies not yet delivered.
+        auto-replies, lists) or given up on, plus replies not yet delivered
+        and replies that never will be.
+
+        A reply the customer's mail server refuses (the address doesn't
+        exist) is marked undeliverable: get_ticket shows delivery_failed_at
+        and the server's reply as delivery_error, and the ticket is reopened
+        and tagged "undeliverable". give_up_reply does the same by hand for
+        a reply stuck for any other reason, without reopening the ticket.
       TEXT
     )
   end

@@ -4,6 +4,11 @@ class Tag < ApplicationRecord
   # asked. Every other tag is a plain label.
   SPAM = "spam"
 
+  # A plain label, but one Spool applies itself: Ticket#reply_refused! adds
+  # it when the customer's mail server refuses a reply's address. Nothing
+  # hides it and nothing happens on removing it.
+  UNDELIVERABLE = "undeliverable"
+
   has_many :ticket_tags, dependent: :delete_all
   has_many :tickets, through: :ticket_tags
 

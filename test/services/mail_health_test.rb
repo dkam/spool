@@ -56,6 +56,18 @@ class MailHealthTest < ActiveSupport::TestCase
     end
   end
 
+  # Ticket #53's reply: refused by the recipient's server, so it will never
+  # go. That is news about one ticket, shown on the ticket, not a sign that
+  # mail has stopped moving.
+  test "a reply that will never go is not one waiting to be delivered" do
+    reply_composed(20.minutes.ago).update!(delivery_failed_at: 19.minutes.ago, delivery_error: "550 5.1.1 User unknown")
+
+    with_env(SMTP.merge("SPOOL_JMAP_TOKEN" => nil)) do
+      assert MailHealth.new.ok?
+      assert_empty MailHealth.new.undelivered(within: 100.years)
+    end
+  end
+
   # With no transport a reply is stored by design; nothing was going to send it.
   test "an undelivered reply is not a problem when nothing is configured to send it" do
     reply_composed(20.minutes.ago)

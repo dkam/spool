@@ -27,4 +27,17 @@ class MessagesController < ApplicationController
 
     redirect_to ticket_path(@ticket, anchor: "message-#{@message.id}")
   end
+
+  # An agent calling time on a reply that hasn't gone: it leaves the header's
+  # count and the backfill, and a send still on the tube skips it. The model
+  # owns what that means; see Message#give_up_delivery!.
+  def give_up
+    message = Message.find(params[:id])
+    destination = ticket_path(message.ticket_id, anchor: "message-#{message.id}")
+
+    message.give_up_delivery!(agent: current_agent)
+    redirect_to destination
+  rescue Message::NotAwaitingDelivery
+    redirect_to destination, alert: "That reply isn't waiting to be delivered."
+  end
 end

@@ -2,7 +2,9 @@
   One entry in the thread. Three treatments, driven by direction:
 
     inbound   flush left, hollow dot — the customer
-    outbound  indented 96px, hollow dot, "Sent to customer"
+    outbound  indented 96px, hollow dot, "Sent to customer" — or, until it
+              goes, "Queued · not yet delivered", and "Not delivered" once
+              the recipient's server refuses it or an agent gives up on it
     note      indented 96px, dashed dot, muted, "Internal note · not sent to
               the customer"
 
@@ -38,9 +40,13 @@
       </span>
     <% elsif message.delivered_at %>
       <span class="text-2xs uppercase tracking-[0.09em] text-faint">Sent to customer</span>
+    <% elsif message.undeliverable? %>
+      <%# The accent, because this is state the agent has to act on: the
+          customer never got it. %>
+      <span class="text-2xs uppercase tracking-[0.09em] text-accent">Not delivered</span>
     <% else %>
-      <%# Honest until Mailgun confirms: the row exists, the email hasn't
-          left yet (or delivery isn't configured). %>
+      <%# Honest until the transport accepts it: the row exists, the email
+          hasn't left yet (or delivery isn't configured). %>
       <span class="text-2xs uppercase tracking-[0.09em] text-faint">Queued · not yet delivered</span>
     <% end %>
 
@@ -56,6 +62,27 @@
         message.note? ? "text-mid text-soft mt-2.5" : "" %>">
     <%= message_body(message) %>
   </div>
+
+  <%# Why a reply hasn't gone, directly under it: the receiving server's own
+      words when it refused the address, who gave up when an agent did, or
+      the last attempt's error while it's still being tried. "Give up" only
+      once the reply is stuck — see give_up_offered?. %>
+  <% if message.outbound? && message.delivered_at.nil? && (message.delivery_error.present? || give_up_offered?(message)) %>
+    <div class="mt-3.5 max-w-[640px] pl-3 border-l <%= message.undeliverable? ? "border-accent" : "border-rule-strong" %>">
+      <% if message.delivery_error.present? %>
+        <% unless message.undeliverable? %>
+          <p class="text-2xs uppercase tracking-[0.09em] text-faint">Last attempt failed</p>
+        <% end %>
+        <p class="mt-1 font-mono text-xs text-soft break-words"><%= message.delivery_error %></p>
+      <% end %>
+
+      <% if give_up_offered?(message) %>
+        <%= button_to "Give up", give_up_message_path(message), method: :post,
+              form_class: "mt-2",
+              class: "cursor-pointer text-sm text-soft hover:text-ink" %>
+      <% end %>
+    </div>
+  <% end %>
 
   <% if (files = message.message_attachments.reject(&:inline?)).any? %>
     <div class="mt-3.5 flex flex-wrap items-baseline gap-x-3 gap-y-1.5 text-sm text-soft">

@@ -5,8 +5,9 @@ module SpoolMcp
     tool_name "mail_status"
     description "Whether mail is moving, and if not, why. Same problems the header shows, with the detail " \
       "to chase them: when the mailbox was last polled cleanly and how far it has read, the last message " \
-      "ingested, live queue depths, mail that reached Spool but was turned away or given up on, and " \
-      "replies not yet delivered. Start here for \"why isn't this email in Spool?\"."
+      "ingested, live queue depths, mail that reached Spool but was turned away or given up on, " \
+      "replies not yet delivered, and replies that never will be (refused by the recipient's mail " \
+      "server, or given up on). Start here for \"why isn't this email in Spool?\"."
     annotations(read_only_hint: true, destructive_hint: false, open_world_hint: false)
     input_schema(properties: {})
 
@@ -28,7 +29,11 @@ module SpoolMcp
           # Turned away on purpose — auto-replies, bounces, bulk and list mail.
           rejected: DroppedMail.rejected.latest_first.limit(RECENT).map { |d| dropped(d) },
           # Every undelivered reply, however old; the header only counts the last week's.
-          undelivered: health.undelivered(within: 100.years).map { |m| undelivered(m) }
+          undelivered: health.undelivered(within: 100.years).map { |m| undelivered(m) },
+          # Replies that will never go — refused by the recipient's server, or
+          # given up on — newest first. Not a fault in Spool, so not in the
+          # header: each one's ticket is tagged and back in the inbox.
+          undeliverable: Message.undeliverable.order(delivery_failed_at: :desc).limit(RECENT).map { |m| undeliverable(m) }
         )
       end
 
@@ -73,7 +78,13 @@ module SpoolMcp
       end
 
       def undelivered(message)
-        {message_id: message.id, ticket_id: message.ticket_id, composed_at: iso(message.sent_at)}
+        {message_id: message.id, ticket_id: message.ticket_id, composed_at: iso(message.sent_at),
+         last_error: message.delivery_error}.compact
+      end
+
+      def undeliverable(message)
+        {message_id: message.id, ticket_id: message.ticket_id, composed_at: iso(message.sent_at),
+         failed_at: iso(message.delivery_failed_at), error: message.delivery_error}.compact
       end
 
       def iso(time) = time&.utc&.iso8601

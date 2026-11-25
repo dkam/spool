@@ -13,7 +13,8 @@
 #                down, or one message can't be fetched and is holding the
 #                cursor.
 #   failed       a message reached Spool and was given up on (DroppedMail).
-#   undelivered  a reply was composed and hasn't gone out.
+#   undelivered  a reply was composed and hasn't gone out, and nothing has
+#                said it never will (see Message#awaiting_delivery?).
 #
 # The MCP mail_status tool reports the same problems alongside the detail an
 # agent needs to chase them, live queue stats included.
@@ -55,9 +56,11 @@ class MailHealth
 
   def failed = DroppedMail.failed
 
-  # Replies that should have gone by now and haven't, oldest first.
+  # Replies that should have gone by now and haven't, oldest first. One the
+  # recipient's server refused, or an agent gave up on, isn't late — it
+  # isn't coming — and the ticket says so instead of the header.
   def undelivered(within: UNDELIVERED_WITHIN)
-    Message.outbound.where(delivered_at: nil)
+    Message.awaiting_delivery
       .where(sent_at: (@now - within)..(@now - UNDELIVERED_AFTER))
       .order(:sent_at)
   end

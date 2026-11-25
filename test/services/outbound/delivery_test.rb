@@ -254,6 +254,93 @@ class OutboundDeliveryTest < ActiveSupport::TestCase
     assert Outbound::Http::Rejected < Outbound::Rejected
   end
 
+  # --- Refused and given up -------------------------------------------------
+
+  # Raises whatever it's given, to drive each failure through the real seam.
+  class FailingTransport
+    def initialize(error) = @error = error
+
+    def deliver_mime(to:, mime:) = raise(@error)
+  end
+
+  REFUSAL = "550 5.1.1 <dana@fieldworks.co>: Recipient address rejected: User unknown in virtual mailbox table"
+
+  # Ticket #53. The reply will never go, so it stops being "not delivered"
+  # and becomes something an agent has to look at: tagged, back in the inbox,
+  # with the server's words under the reply.
+  test "a refused recipient marks the reply undeliverable and puts the ticket back in the inbox" do
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Fixed it.")
+    @ticket.update!(state: "closed")
+
+    outcome = travel_to(1.minute.from_now) do
+      with_smtp_env do
+        Outbound::Delivery.deliver!(message, transport: FailingTransport.new(Outbound::RecipientRejected.new(REFUSAL)))
+      end
+    end
+
+    assert_equal :refused, outcome
+    message.reload
+    assert_nil message.delivered_at
+    assert message.undeliverable?
+    assert_equal REFUSAL, message.delivery_error
+
+    @ticket.reload
+    assert @ticket.tagged?(Tag::UNDELIVERABLE)
+    assert_equal "open", @ticket.state
+    # Unread again, and at the top of the inbox: something new happened.
+    assert_equal message.delivery_failed_at.to_i, @ticket.last_activity_at.to_i
+  end
+
+  test "a reply already given up on is never sent" do
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Too late.")
+    message.give_up_delivery!(agent: @agent)
+
+    with_smtp_env do
+      assert_equal :undeliverable, Outbound::Delivery.deliver!(message, transport: @transport)
+    end
+
+    assert_empty @transport.deliveries
+    assert_nil message.reload.delivered_at
+  end
+
+  # A refusal of *us* — credentials, sender — and plain network trouble are
+  # ours to fix. The reply stays waiting for that fix and the backfill, but
+  # the thread can say why it hasn't gone.
+  test "any other failure leaves the reply waiting, with the reason recorded" do
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Hold on.")
+    @ticket.update!(state: "pending")
+
+    with_smtp_env do
+      assert_raises Outbound::Smtp::Rejected do
+        Outbound::Delivery.deliver!(message,
+          transport: FailingTransport.new(Outbound::Smtp::Rejected.new("SMTP refused: Net::SMTPAuthenticationError: 535 5.7.8 Authentication failed")))
+      end
+    end
+
+    message.reload
+    assert_not message.undeliverable?
+    assert_equal "SMTP refused: Net::SMTPAuthenticationError: 535 5.7.8 Authentication failed", message.delivery_error
+    assert_not @ticket.reload.tagged?(Tag::UNDELIVERABLE)
+    assert_equal "pending", @ticket.state
+
+    with_smtp_env do
+      assert_raises Net::SMTPServerBusy do
+        Outbound::Delivery.deliver!(message, transport: FailingTransport.new(Net::SMTPServerBusy.new("421 4.3.2 try later")))
+      end
+    end
+    assert_equal "Net::SMTPServerBusy: 421 4.3.2 try later", message.reload.delivery_error
+  end
+
+  test "a reply that goes on a later attempt drops the earlier attempt's error" do
+    message = Message.compose!(ticket: @ticket, agent: @agent, text: "Second time lucky.")
+    message.update!(delivery_error: "Net::SMTPServerBusy: 421 4.3.2 try later")
+
+    with_smtp_env { Outbound::Delivery.deliver!(message, transport: @transport) }
+
+    assert message.reload.delivered_at
+    assert_nil message.delivery_error
+  end
+
   test "a transient SMTP error propagates uncaught for retry, not Rejected" do
     transient = Class.new do
       def deliver_mime(to:, mime:)

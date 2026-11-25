@@ -103,6 +103,17 @@ class SpoolMcpTest < ActiveSupport::TestCase
     assert_equal "sam@spool.test", result[:messages].last.dig(:from, :email)
   end
 
+  test "get_ticket says when a reply will never go, and why" do
+    reply = ApplicationRecord.writing { Message.compose!(ticket: @open, agent: @agent, text: "Fixed it.") }
+    reply.update!(delivery_failed_at: Time.utc(2026, 11, 23, 4, 43, 3), delivery_error: "550 5.1.1 User unknown")
+
+    row = payload(SpoolMcp::GetTicket.call(id: @open.id))[:messages].last
+
+    assert_nil row[:delivered_at]
+    assert_equal "2026-11-23T04:43:03Z", row[:delivery_failed_at]
+    assert_equal "550 5.1.1 User unknown", row[:delivery_error]
+  end
+
   test "get_ticket with an unknown id is an error response, not an exception" do
     response = SpoolMcp::GetTicket.call(id: 999_999)
 
@@ -160,6 +171,27 @@ class SpoolMcpTest < ActiveSupport::TestCase
     # No outbound transport is configured in test, and the tool says so out loud.
     assert_match(/not configured/, result[:delivery])
     assert_equal "pending", @open.reload.state
+  end
+
+  test "give_up_reply stops a stuck reply, signed by the connected agent" do
+    reply = ApplicationRecord.writing { Message.compose!(ticket: @open, agent: @agent, text: "Hello?") }
+
+    result = payload(SpoolMcp::GiveUpReply.call(message_id: reply.id, server_context: {agent: @agent}))
+
+    assert_equal reply.id, result[:message_id]
+    assert_equal @open.id, result[:ticket_id]
+    assert_equal "Given up by Sam", result[:delivery_error]
+    assert reply.reload.undeliverable?
+  end
+
+  test "give_up_reply refuses anything that isn't a reply still waiting to go" do
+    note = ApplicationRecord.writing { Message.compose!(ticket: @open, agent: @agent, text: "x", direction: "note") }
+
+    [note.id, @inbound.id, 999_999].each do |id|
+      response = SpoolMcp::GiveUpReply.call(message_id: id, server_context: {agent: @agent})
+      assert response.error?, "message #{id}"
+    end
+    assert_not note.reload.undeliverable?
   end
 
   test "update_ticket closes, assigns and unassigns in UI vocabulary" do
@@ -222,7 +254,7 @@ class SpoolMcpTest < ActiveSupport::TestCase
   test "the server registers every tool" do
     tools = SpoolMcp.server.tools.keys
 
-    assert_equal %w[add_note get_ticket list_tickets mail_status reply_to_ticket update_ticket], tools.sort
+    assert_equal %w[add_note get_ticket give_up_reply list_tickets mail_status reply_to_ticket update_ticket], tools.sort
   end
 
   # --- mail_status -----------------------------------------------------------
@@ -250,6 +282,25 @@ class SpoolMcpTest < ActiveSupport::TestCase
     assert_equal "precedence: bulk", result[:rejected].sole[:reason]
     assert_equal "August deals", result[:rejected].sole[:subject]
     assert_equal @inbound.ticket_id, result.dig(:last_ingested, :ticket_id)
+  end
+
+  # A refused reply isn't waiting for anything, so it isn't "undelivered";
+  # it's listed on its own, with the reason, for "why didn't they get it?".
+  test "mail_status lists replies that will never go apart from ones still waiting" do
+    waiting, refused = ApplicationRecord.writing do
+      [Message.compose!(ticket: @open, agent: @agent, text: "Waiting."),
+        Message.compose!(ticket: @open, agent: @agent, text: "Refused.")]
+    end
+    waiting.update!(sent_at: 1.hour.ago)
+    refused.update!(sent_at: 1.hour.ago, delivery_failed_at: 59.minutes.ago, delivery_error: "550 5.1.1 User unknown")
+
+    result = stubbing(Ingest::Tuber, :reachable?, -> { false }) { payload(SpoolMcp::MailStatus.call) }
+
+    assert_equal [waiting.id], result[:undelivered].map { |m| m[:message_id] }
+    undeliverable = result[:undeliverable].sole
+    assert_equal refused.id, undeliverable[:message_id]
+    assert_equal @open.id, undeliverable[:ticket_id]
+    assert_equal "550 5.1.1 User unknown", undeliverable[:error]
   end
 
   test "mail_status is ok when mail is moving" do

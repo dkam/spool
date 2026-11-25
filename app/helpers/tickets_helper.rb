@@ -134,6 +134,15 @@ module TicketsHelper
     end
   end
 
+  # Whether the thread offers "Give up" on a reply. Only once it's stuck: it
+  # has already failed, or it's older than the header's grace for a send. A
+  # reply seconds old with nothing wrong is on its way, and a button beside
+  # it only invites a mistaken click.
+  def give_up_offered?(message)
+    message.awaiting_delivery? &&
+      (message.delivery_error.present? || message.sent_at.to_i <= MailHealth::UNDELIVERED_AFTER.ago.to_i)
+  end
+
   # The row preview: the newest message's excerpt, attributed when it came from
   # our side. Without the attribution an agent can't tell at a glance whether
   # the last word was the customer's or ours, which is the single most useful

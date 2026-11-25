@@ -177,6 +177,50 @@ class OutboundSmtpTest < ActiveSupport::TestCase
     end
   end
 
+  # Ticket #53: Fastmail refused careerspring@fastmail.com at RCPT TO. Not
+  # ours to fix and never going to change — the recipient's address is bad.
+  test "a refused recipient address raises RecipientRejected, carrying the server's reply" do
+    error = refusing("550 5.1.1 <careerspring@fastmail.com>: Recipient address rejected: User unknown in virtual mailbox table")
+
+    assert_kind_of Outbound::RecipientRejected, error
+    assert_kind_of Outbound::Rejected, error, "still a Rejected, so nothing retries it"
+    assert_equal "550 5.1.1 <careerspring@fastmail.com>: Recipient address rejected: User unknown in virtual mailbox table",
+      error.message
+  end
+
+  # RFC 3463: X.1.1 bad mailbox, X.1.2 bad domain, X.1.3 bad syntax, X.1.6
+  # moved, X.1.10 null MX, X.2.1 mailbox disabled. Gmail answers multi-line,
+  # with a hyphen after the code.
+  test "every enhanced status code that blames the address counts as the recipient's" do
+    [
+      "550-5.1.1 The email account that you tried to reach does not exist.",
+      "550 5.1.2 Host unknown",
+      "553 5.1.3 Bad recipient address syntax",
+      "550 5.1.6 Mailbox has moved",
+      "556 5.1.10 Recipient address has null MX",
+      "550 5.2.1 The email account that you tried to reach is disabled."
+    ].each do |reply|
+      assert_kind_of Outbound::RecipientRejected, refusing(reply), reply
+    end
+  end
+
+  # These are refusals too, but of us — our credentials, our sender address,
+  # our content. Fixable on our side, and after the fix the backfill should
+  # send the reply, so none of them may mark it undeliverable.
+  test "a refusal that isn't about the recipient's address stays a plain Rejected" do
+    [
+      [Net::SMTPAuthenticationError, "535 5.7.8 Authentication failed"],
+      [Net::SMTPFatalError, "553 5.1.8 <support@example.com>: Sender address rejected"],
+      [Net::SMTPFatalError, "554 5.7.1 Message rejected as spam"],
+      [Net::SMTPFatalError, "550 no such user"] # no enhanced code: can't tell whose fault
+    ].each do |error_class, reply|
+      error = refusing(reply, error_class: error_class)
+
+      assert_kind_of Outbound::Smtp::Rejected, error, reply
+      assert_not_kind_of Outbound::RecipientRejected, error, reply
+    end
+  end
+
   test "transient SMTP errors propagate uncaught — the consumer retries them" do
     busy = Class.new(FakeSmtp) do
       def deliver!(mail)
@@ -189,6 +233,24 @@ class OutboundSmtpTest < ActiveSupport::TestCase
         assert_raises Net::SMTPServerBusy do
           Outbound::Smtp.new.deliver_mime(to: "x@example.com", mime: "From: a@b\r\n\r\nc")
         end
+      end
+    end
+  end
+
+  private
+
+  # The error Outbound::Smtp raises when the server answers `reply`.
+  def refusing(reply, error_class: Net::SMTPFatalError)
+    smtp = Class.new(FakeSmtp) do
+      define_method(:deliver!) { |_mail| raise error_class, reply }
+    end
+
+    with_env(SMTP_ENV) do
+      stubbing_smtp(smtp) do
+        Outbound::Smtp.new.deliver_mime(to: "x@example.com", mime: "From: a@b\r\n\r\nc")
+        flunk "expected #{reply.inspect} to be refused"
+      rescue Outbound::Rejected => e
+        e
       end
     end
   end

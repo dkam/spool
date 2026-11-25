@@ -51,6 +51,15 @@ command) raise `Outbound::Rejected` so the consumer gives up rather than
 cycling; transient trouble (421, ECONNREFUSED, timeouts) propagates for
 retry, then gives up via `MAX_RETRIES`.
 
+Among the permanent ones, a refusal of the *recipient's address* raises
+`Outbound::RecipientRejected`, a subclass carrying the server's reply. It is
+recognised only by an RFC 3463 enhanced status code that blames the address
+— 5.1.1 no such mailbox, 5.1.2 no such domain, 5.1.3 bad syntax, 5.1.6
+moved, 5.1.10 null MX, 5.2.1 disabled. Net::SMTP doesn't say which command
+was refused, so a bare `550` could be the recipient, our sender or our
+content; without an enhanced code it stays a plain `Rejected`. See
+[Refused and given up](#refused-and-given-up).
+
 ### Mailgun (`Outbound::Mailgun`)
 
 Sends go to the `messages.mime` endpoint with a fully-built RFC822 message,
@@ -105,7 +114,8 @@ possible duplicate email, never a silently lost one. That is the right side to
 err on.
 
 It is also the honesty bit: the thread header and `get_ticket` over MCP show
-an outbound message as sent only once this is set.
+an outbound message as sent only once this is set. Its opposite is
+`delivery_failed_at`: set, the reply will never go.
 
 ## Failure handling
 
@@ -125,10 +135,48 @@ In the consumer (`Ingest::OutboundConsumer`):
   connection failures, missing configuration.
 
 Giving up reports to Sentry and deletes the job — never buries it. The reply
-itself is untouched: a row with no `delivered_at`, which the thread shows as
-not yet delivered and the header counts once it is fifteen minutes old. Fix
-the cause and run the backfill below. A buried job would have held its
+itself stays a row with no `delivered_at`, which the thread shows as not yet
+delivered and the header counts once it is fifteen minutes old. Fix the
+cause and run the backfill below. A buried job would have held its
 `idp:outbound-<id>` key and made that backfill silently skip the reply.
+
+Every failed attempt writes its error to `messages.delivery_error` — a
+`Rejected`'s message as it stands, anything else prefixed with its class —
+and the thread shows it under the reply as "Last attempt failed". A send
+that goes on a later attempt clears it.
+
+## Refused and given up
+
+A refused recipient address isn't a failure of ours, and no fix on our side
+and no backfill will ever deliver it — the backfill would only send it back
+to the address that refused it. So `Outbound::Delivery.deliver!` doesn't
+raise on `Outbound::RecipientRejected`. It calls `Message#refused!` and
+returns `:refused`, and the consumer deletes the job:
+
+- `delivery_failed_at` is stamped, and `delivery_error` holds the server's
+  reply (`550 5.1.1 <…>: Recipient address rejected: User unknown…`). The
+  thread labels the reply "Not delivered" and shows the reply under it.
+- `Ticket#reply_refused!` tags the ticket `undeliverable` and reopens it as
+  fresh activity — unread, top of the inbox. The customer is waiting on an
+  answer they won't get; finding another address or closing the ticket is a
+  person's call.
+- The header stops counting it, because nothing is wrong with mail: the
+  ticket is where it shows. `mail_status` lists it under `undeliverable`.
+
+Anything stuck for another reason can be given up on by hand — "Give up"
+under the reply in the thread, once it has failed or is fifteen minutes old,
+or `give_up_reply` over MCP. `Message#give_up_delivery!` stamps
+`delivery_failed_at` with "Given up by <agent>" (plus the last error, if
+there was one) and leaves the ticket's state and tags alone: it's a decision,
+not news. `deliver!` skips a reply with `delivery_failed_at` the way it skips
+one already delivered, so a job still on the tube never sends it.
+
+Only SMTP's synchronous refusals are recognised. A bounce that comes back
+later as an email — the usual case for an address on another provider, which
+Fastmail accepts and then fails to deliver — is still turned away by
+`LoopGuard` as a delivery-status report, and the reply keeps saying "Sent to
+customer". Mailgun's refusals at the API (`Http::Rejected`) aren't
+classified either, and its bounces arrive as events Spool doesn't read.
 
 ## Backfill
 
@@ -136,9 +184,11 @@ the cause and run the backfill below. A buried job would have held its
 $ bin/rails outbound:backfill
 ```
 
-Queues every outbound message with `delivered_at IS NULL` — replies composed
-before a transport was configured (including everything from before delivery
-existed), or while the queue was down. Safe to run at any time: the
+Queues every reply still awaiting delivery (`Message.awaiting_delivery`: no
+`delivered_at`, no `delivery_failed_at`) — replies composed before a
+transport was configured (including everything from before delivery
+existed), while the queue was down, or given up on after an error since
+fixed. Never one refused or given up on. Safe to run at any time: the
 per-message `idp` key suppresses anything already on the tube, and
 `delivered_at` skips anything already sent. It refuses to run unconfigured
 rather than queueing jobs that can only fail.

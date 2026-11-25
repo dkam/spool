@@ -100,7 +100,7 @@ handled here, and each piece is load-bearing:
   | Consumer | Given up on, the thing survives as | Recovered by |
   | --- | --- | --- |
   | `InboundConsumer` | the mail in the mailbox, plus a `DroppedMail` row (`kind: "failed"`) with its Message-ID and receivedAt | `bin/rails jmap:rewind` |
-  | `OutboundConsumer` | the reply, a `Message` with no `delivered_at` | `bin/rails outbound:backfill` |
+  | `OutboundConsumer` | the reply, a `Message` with no `delivered_at` and the last error in `delivery_error` | `bin/rails outbound:backfill` (a refused address isn't given up on: the reply is marked undeliverable instead, and never queued again) |
   | `DispatchConsumer` | the schedule, which runs it again next tick | nothing — it doesn't retry either |
   | `ActiveJobConsumer` | nothing; report only | — |
 
