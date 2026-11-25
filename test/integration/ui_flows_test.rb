@@ -291,6 +291,24 @@ class UiFlowsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # A bounce: the relay took it (delivered_at), the far end failed it later.
+  # The failure is the newer and truer news.
+  test "a reply that bounced after it left says Not delivered, not Sent to customer" do
+    reply = Message.compose!(ticket: @ticket, agent: agent, text: "Fixed it.")
+    reply.update!(delivered_at: 2.hours.ago, delivery_failed_at: 1.hour.ago,
+      delivery_error: "Bounced by mx.fieldworks.co: 550 5.1.1 <dana@fieldworks.co>: User unknown")
+
+    get ticket_path(@ticket)
+
+    assert_response :success
+    assert_select "#message-#{reply.id}" do
+      assert_select "header", text: /Not delivered/
+      assert_select "header", text: /Sent to customer/, count: 0
+      assert_select "*", text: /Bounced by mx\.fieldworks\.co: 550 5\.1\.1/
+      assert_select "form[action=?]", give_up_message_path(reply), count: 0
+    end
+  end
+
   test "a reply that hasn't gone shows its last error and offers to give up on it" do
     stuck = Message.compose!(ticket: @ticket, agent: agent, text: "Still trying.")
     stuck.update!(delivery_error: "Net::SMTPServerBusy: 421 4.3.2 try later")

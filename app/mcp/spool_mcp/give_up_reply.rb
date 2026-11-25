@@ -5,7 +5,7 @@ module SpoolMcp
     tool_name "give_up_reply"
     description "Stop trying to deliver a reply that hasn't gone out. It is never sent, leaves mail_status's " \
       "undelivered list and the header's count, and get_ticket shows it as given up, signed by you. " \
-      "The ticket's state is left alone. A reply the customer's mail server refused is already " \
+      "The ticket's state is left alone. A reply the customer's mail server refused or bounced is already " \
       "marked this way; this is for one stuck for any other reason. message_id is a message's id from get_ticket."
     annotations(destructive_hint: false, idempotent_hint: false, open_world_hint: false)
     input_schema(

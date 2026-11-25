@@ -171,12 +171,39 @@ there was one) and leaves the ticket's state and tags alone: it's a decision,
 not news. `deliver!` skips a reply with `delivery_failed_at` the way it skips
 one already delivered, so a job still on the tube never sends it.
 
-Only SMTP's synchronous refusals are recognised. A bounce that comes back
-later as an email — the usual case for an address on another provider, which
-Fastmail accepts and then fails to deliver — is still turned away by
-`LoopGuard` as a delivery-status report, and the reply keeps saying "Sent to
-customer". Mailgun's refusals at the API (`Http::Rejected`) aren't
-classified either, and its bounces arrive as events Spool doesn't read.
+### Bounces
+
+A reply can also be accepted and fail later — a server that checks the
+mailbox after the SMTP conversation, a forward that dies further on, a relay
+that retried for days and gave up. That comes back as a delivery-status
+report (RFC 3464) to the envelope sender, the support mailbox. `LoopGuard`
+still turns it away, since it isn't correspondence, but first
+`Ingest::Bounce` reads it:
+
+- a `message/delivery-status` part with a recipient whose `Action` is
+  `failed`, and
+- the original returned with it (`message/rfc822` or `text/rfc822-headers`),
+  whose `Message-ID` is one of our replies'.
+
+Both have to be there. The match is on a Message-ID Spool issued, so it's
+exact; the original's `References` are never read, since they name earlier
+replies. The reply gets `Message#refused!` like a refused address — tagged,
+reopened — with `delivery_error` like `Bounced by mx.example.com: 550 5.1.1
+<…>: User unknown`, and keeps its `delivered_at`, because it did leave. The
+thread's "Not delivered" wins over "Sent to customer". Every failed bounce
+counts, whatever its status: unlike a refusal during the send, nothing in
+Spool would ever try it again, so "ours to fix" (a 5.7.x policy rejection,
+say) shows the same way, with the reason saying whose. The `DroppedMail`
+row's reason names the reply (`bounce for reply 105 on ticket #53`).
+
+A delay warning (`Action: delayed`), a report without the original, and a
+non-standard bounce with no delivery-status part are ordinary rejections,
+as before. Reading the same bounce twice (a rewind) changes nothing the
+second time.
+
+Mailgun's refusals at the API (`Http::Rejected`) aren't classified, and its
+bounces go to Mailgun's own envelope sender and arrive as events Spool
+doesn't read.
 
 ## Backfill
 

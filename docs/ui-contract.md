@@ -209,9 +209,10 @@ present.
 configured — the row simply stays stored). `messages.delivered_at` is stamped
 once the transport accepts the send, and is what the thread's "Sent to
 customer" / "Queued · not yet delivered" label reads. `delivery_failed_at`
-reads "Not delivered": the recipient's server refused the address, or an
-agent gave up (`Message#give_up_delivery!`). `delivery_error`, shown under
-the reply, says why it hasn't gone. See [outbound.md](outbound.md).
+reads "Not delivered", and wins over `delivered_at`: the recipient's server
+refused the address, or bounced the reply after it left, or an agent gave up
+(`Message#give_up_delivery!`). `delivery_error`, shown under the reply, says
+why it hasn't gone or didn't arrive. See [outbound.md](outbound.md).
 
 ## Writing from a GET
 

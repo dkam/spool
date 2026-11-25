@@ -64,7 +64,8 @@ module SpoolMcp
         and replies that never will be.
 
         A reply the customer's mail server refuses (the address doesn't
-        exist) is marked undeliverable: get_ticket shows delivery_failed_at
+        exist), or bounces back later, is marked undeliverable: get_ticket
+        shows delivery_failed_at
         and the server's reply as delivery_error, and the ticket is reopened
         and tagged "undeliverable". give_up_reply does the same by hand for
         a reply stuck for any other reason, without reopening the ticket.

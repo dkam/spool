@@ -39,9 +39,11 @@ class Message < ApplicationRecord
   def awaiting_delivery? = outbound? && delivered_at.nil? && delivery_failed_at.nil?
   def undeliverable? = delivery_failed_at.present?
 
-  # The recipient's mail server refused this reply's address — called by
-  # Outbound::Delivery with the server's own words. The reply will never go,
-  # and the customer is still waiting on an answer they won't get, so the
+  # The recipient's mail server refused this reply — called by
+  # Outbound::Delivery when it refuses the address during the send, and by
+  # Ingest::Bounce when a delivery report says it failed later, both with the
+  # server's own words. The reply will never arrive, and the customer is
+  # still waiting on an answer they won't get, so the
   # ticket comes back to the inbox, tagged, as news: what an agent does next
   # (find another address, or close it) is a human call.
   def refused!(reason, at: Time.current)

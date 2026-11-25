@@ -29,6 +29,12 @@ module Ingest
       mail = ::Mail.read_from_string(raw)
 
       if (reason = LoopGuard.reject_reason(mail))
+        # A bounce is never a ticket, but one about a reply of ours is news
+        # for that reply's ticket. See Bounce.
+        if (bounced = Bounce.record!(mail))
+          reason = "bounce for reply #{bounced.id} on ticket ##{bounced.ticket_id}"
+        end
+
         Rails.logger.info "[Ingest] rejected (#{reason})"
         DroppedMail.record!(kind: "rejected", reason: reason, raw: raw, mail: mail,
           source: source, received_at: received_at)

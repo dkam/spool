@@ -120,7 +120,7 @@ Defined in `app/mcp/`, registered in `SpoolMcp.server`.
 | `add_note` | An internal note via `Message.compose!`. Never emailed, state untouched. |
 | `reply_to_ticket` | An outbound reply via `Message.compose!` — **this emails a real customer** wherever Mailgun is configured. Moves the ticket to waiting; delivery is asynchronous, and the response's `delivery` field says whether the reply was queued or (unconfigured) only stored. |
 | `update_ticket` | Manual state moves (closing, mostly), assignment, and tags (`add_tags` / `remove_tags`). Tagging `spam` also blocks the sender; removing it unblocks — see [tags.md](tags.md). |
-| `give_up_reply` | Stop trying to deliver a reply that hasn't gone, via `Message#give_up_delivery!`: never sent, out of the header's count and the backfill, signed by the agent. State untouched. A reply the recipient's server refused is already marked this way — see [outbound.md](outbound.md#refused-and-given-up). |
+| `give_up_reply` | Stop trying to deliver a reply that hasn't gone, via `Message#give_up_delivery!`: never sent, out of the header's count and the backfill, signed by the agent. State untouched. A reply the recipient's server refused or bounced is already marked this way — see [outbound.md](outbound.md#refused-and-given-up). |
 | `mail_status` | Whether mail is moving: the header's problems, plus the last clean poll and how far it has read, the last message ingested, live queue depths, mail turned away or given up on (`DroppedMail`), replies not yet delivered (with their last error), and replies that never will be (`undeliverable`, with the reason). Where to start on "why isn't this email in Spool?". |
 
 Two vocabulary rules, both enforced in `SpoolMcp` so the tools can't drift

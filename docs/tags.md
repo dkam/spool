@@ -37,8 +37,9 @@ ticket is back in the inbox exactly as it would have arrived.
 
 ## Undeliverable is a tag Spool applies itself
 
-When the customer's mail server refuses a reply's address,
-`Ticket#reply_refused!` tags the ticket `undeliverable` and reopens it — see
+When the customer's mail server refuses a reply's address, or a bounce
+comes back for a reply later, `Ticket#reply_refused!` tags the ticket
+`undeliverable` and reopens it — see
 [outbound.md](outbound.md#refused-and-given-up). Otherwise it is a plain
 label: nothing hides it, and removing it does nothing but remove it. It
 stays after the ticket is closed, so the chip is a list of customers Spool

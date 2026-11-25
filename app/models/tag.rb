@@ -5,7 +5,7 @@ class Tag < ApplicationRecord
   SPAM = "spam"
 
   # A plain label, but one Spool applies itself: Ticket#reply_refused! adds
-  # it when the customer's mail server refuses a reply's address. Nothing
+  # it when the customer's mail server refuses a reply or bounces it. Nothing
   # hides it and nothing happens on removing it.
   UNDELIVERABLE = "undeliverable"
 

@@ -6,8 +6,8 @@ module SpoolMcp
     description "Whether mail is moving, and if not, why. Same problems the header shows, with the detail " \
       "to chase them: when the mailbox was last polled cleanly and how far it has read, the last message " \
       "ingested, live queue depths, mail that reached Spool but was turned away or given up on, " \
-      "replies not yet delivered, and replies that never will be (refused by the recipient's mail " \
-      "server, or given up on). Start here for \"why isn't this email in Spool?\"."
+      "replies not yet delivered, and replies that never will be (refused or bounced by the " \
+      "recipient's mail server, or given up on). Start here for \"why isn't this email in Spool?\"."
     annotations(read_only_hint: true, destructive_hint: false, open_world_hint: false)
     input_schema(properties: {})
 
@@ -30,8 +30,8 @@ module SpoolMcp
           rejected: DroppedMail.rejected.latest_first.limit(RECENT).map { |d| dropped(d) },
           # Every undelivered reply, however old; the header only counts the last week's.
           undelivered: health.undelivered(within: 100.years).map { |m| undelivered(m) },
-          # Replies that will never go — refused by the recipient's server, or
-          # given up on — newest first. Not a fault in Spool, so not in the
+          # Replies that will never arrive — refused or bounced by the
+          # recipient's server, or given up on — newest first. Not a fault in Spool, so not in the
           # header: each one's ticket is tagged and back in the inbox.
           undeliverable: Message.undeliverable.order(delivery_failed_at: :desc).limit(RECENT).map { |m| undeliverable(m) }
         )
